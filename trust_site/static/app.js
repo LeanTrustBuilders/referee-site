@@ -360,7 +360,7 @@ async function renderDecl(name) {
   if (e.claim) h += `<p><b>Claim</b>${e.claim.label ? ` — ${esc(e.claim.label)}` : ''}, from ${esc(e.claim.source)}. <a href="#/claims">All claims</a>.</p>`;
   if (e.specifies.length) h += `<p><b>Part of the specification of</b> ${e.specifies.map(s => declLink(s.target) + (s.comment ? ` <span class="muted">(${esc(s.comment)})</span>` : '')).join(', ')}.</p>`;
   if (e.specifiedBy.length) h += `<p><b>Specified by</b> ${e.specifiedBy.map(s => `${declLink(s.decl)}${s.kind !== 'specifies' ? ` <span class="muted">(${esc(s.kind)})</span>` : ''}${s.comment ? ` <span class="muted">— ${md(s.comment, true)}</span>` : ''}`).join(', ')}.</p>`;
-  for (const c of e.characterizations) h += `<p><b>Characterized</b> by ${declLink(c.property)}${c.comment ? ` (${esc(c.comment)})` : ''}: existence ${c.existence.map(x => declLink(x)).join(', ') || '<i>missing</i>'}; uniqueness ${c.uniqueness.map(u => declLink(u.decl) + (u.relation ? ` <span class="muted">up to <code>${esc(u.relation)}</code></span>` : '')).join(', ') || '<i>missing</i>'}.</p>`;
+  for (const c of e.characterizations) h += `<p><b>Characterized</b> by ${declLink(c.property)}${c.comment ? ` (${md(c.comment, true)})` : ''}: existence ${c.existence.map(x => declLink(x)).join(', ') || '<i>missing</i>'}; uniqueness ${c.uniqueness.map(u => declLink(u.decl) + (u.relation ? ` <span class="muted">up to <code>${esc(u.relation)}</code></span>` : '')).join(', ') || '<i>missing</i>'}.</p>`;
   if (!e.isProp && !e.specifiedBy.length && !e.characterizations.length && S.hasSpecs) h += `<p class="muted">No theorem is marked as specifying this definition.</p>`;
   h += '</div>';
   if (e.provenance && S.ledger) {
