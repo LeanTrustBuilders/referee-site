@@ -178,3 +178,46 @@ a.mono:hover, .n a:hover, .rowcard .h a:hover, table.grid td.n a:hover, .decl-li
 .authors h3, .readme h3, .authors h4 { font-size: 1.05rem; margin: 12px 0 4px; }
 .authors ul, .readme ul { margin: 6px 0; padding-left: 22px; }
 blockquote.readme { margin: 10px 0 10px 16px; padding-left: 14px; border-left: 3px solid var(--line-strong); }
+
+/* hovers */
+.term { border-bottom: 1px dotted var(--faint); cursor: help; }
+.term.local { border-bottom-color: var(--link); }
+.term:hover { background: var(--code-bg); border-bottom-style: solid; }
+.tip { position: absolute; z-index: 50; max-height: 60vh; overflow: auto; background: var(--panel); border: 1px solid var(--line-strong);
+  border-radius: 8px; box-shadow: 0 10px 28px rgba(0,0,0,.16); padding: 10px 12px; font-size: 14px; }
+.tip-sig { font: 13px/1.45 var(--mono); white-space: pre-wrap; word-break: break-word; }
+.tip-meta { font: 12px var(--serif); color: var(--muted); margin: 4px 0; }
+.tip-doc { font: 14px/1.5 var(--serif); border-top: 1px solid var(--line); margin-top: 6px; padding-top: 6px; }
+.tip-doc p { margin: 4px 0; } .tip-doc pre { font-size: 12px; }
+
+/* the statement: compact (instances inline) and expanded (one assumption per line, with glosses) */
+.card-head { display: flex; justify-content: space-between; align-items: center; }
+.expand-btn { font-size: 12px; }
+.anat .arow { padding: 2px 0; }
+.anat .arow code, .anat .v > code { font-size: 14px; }
+.anat .exp { display: none; }
+body.anat-expanded .anat .inl { display: none; }
+body.anat-expanded .anat .exp { display: block; }
+.anat .inst { margin: 2px 0 2px 18px; }
+.anat .gloss { display: block; font: 13px/1.45 var(--serif); color: var(--muted); margin: 1px 0 4px 18px; }
+.anat .inst .gloss { display: inline; margin: 0 0 0 6px; }
+.anat .gloss:empty { display: none; }
+.card.upstream { border-left-color: var(--faint); padding-bottom: 12px; }
+
+/* graphs: the key, selection, and the cards under the picture */
+.graph .gkey { font-size: 13px; margin: 2px 0 8px; } .graph .gkey summary { cursor: pointer; color: var(--muted); font-weight: 600; }
+.graph .gkey dl { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 6px 0 0; }
+.graph .gkey dt { font-weight: 600; } .graph .gkey dd { margin: 0; color: var(--muted); }
+.graph .canvas.dragging { cursor: grabbing; }
+.graph .node.sel rect { stroke-width: 2.6; }
+.graph .edge.hot { stroke: var(--link); stroke-width: 1.8; opacity: 1; }
+.graph .bandbg { fill: var(--code-bg); }
+.graph .btn[aria-pressed="true"] { background: var(--text); color: var(--panel); border-color: var(--text); }
+.graph .hint { font-size: 13px; color: var(--muted); margin: 8px 0 4px; }
+.gcard { margin-top: 10px; }
+.gcard .lead-note { font-size: 14px; color: var(--muted); }
+.gentry { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 8px; }
+.gentry .ghead { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.gentry .ghead h3 { margin: 4px 0; font-size: 1rem; word-break: break-all; }
+.gentry .warnline { color: var(--warn); font-size: 13px; margin: 2px 0; }
+.stale-note { font-size: 13px; color: var(--muted); }

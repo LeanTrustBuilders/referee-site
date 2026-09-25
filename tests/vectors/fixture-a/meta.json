@@ -1,6 +1,6 @@
 {"toolchain": "leanprover/lean4:v4.35.0-rc2",
  "spec": "ltb-dataset/0",
- "producer": {"version": "0.4.0", "parts": 1, "name": "trust-extract"},
+ "producer": {"version": "0.5.0", "parts": 1, "name": "trust-extract"},
  "packages":
  [{"requires": ["TrustAnnotations", "lean4"], "name": "Fixture", "modules": 4},
   {"requires": ["lean4"], "name": "TrustAnnotations", "modules": 4},
@@ -27,8 +27,9 @@
  [{"schema": "docstring/1",
    "name": "docstring",
    "file": "facets/docstring.jsonl",
-   "description": "the declaration's docstring, verbatim",
-   "count": 15},
+   "description":
+   "the declaration's docstring, verbatim (project nodes, and upstream nodes unless the extractor ran with --no-upstream-docs)",
+   "count": 29},
   {"schema": "source/1",
    "name": "source",
    "file": "facets/source.jsonl",
@@ -71,11 +72,17 @@
    "description":
    "`@[specifies]` annotations recorded in the TrustAnnotations extension: for each declaration, the payload of each application, in order",
    "count": 3},
+  {"schema": "signature/1",
+   "name": "signature",
+   "file": "facets/signature.jsonl",
+   "description":
+   "every node's signature as Lean prints it (`name (x : α) … : β`), for hovers",
+   "count": 41},
   {"schema": "statement/1",
    "name": "statement",
    "file": "facets/statement.jsonl",
    "description":
-   "the declaration's statement taken apart: its binders (name, pretty-printed type, role: type, variable, hypothesis or instance), the conclusion under them, and for a definition its body, for a structure its fields, for another inductive type its constructors; pretty-printed by Lean, `⋯` marking what a bounded printer cut",
+   "the declaration's statement taken apart: its binders (name, pretty-printed type, role: type, variable, hypothesis or instance), the conclusion under them, and for a definition its body, for a structure its fields, for another inductive type its constructors; pretty-printed by Lean, `⋯` marking what a bounded printer cut; with each text, `refs`: the span and name of each constant it names, and with each binder the `head` constant of its type",
    "count": 21}],
  "edges":
  [{"name": "statement",

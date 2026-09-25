@@ -64,6 +64,7 @@ function setVerdict(name, verdict, note) {
   if (verdict === null && !note) delete audit.decls[name];
   else audit.decls[name] = {...cur, verdict, note: note ?? cur.note ?? '', meaning: row ? row[R.MEANING] : cur.meaning, at: new Date().toISOString()};
   saveAudit(); coverageCache.clear();
+  document.dispatchEvent(new CustomEvent('trust-site:audit', {detail: name}));
 }
 let countPublished = false;
 function accepted(id) {
@@ -157,9 +158,150 @@ function report() {
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${S.root || 'site'}-report.md`; a.click();
 }
 
+/* ---------- hovers: what a constant is, wherever it is named ---------- */
+const tipShards = new Map();
+function fnv(name) { let h = 0x811c9dc5; for (let i = 0; i < name.length; i++) { h ^= name.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h >>> 0; }
+function tipFor(name) {
+  if (!S.tipShards) return Promise.resolve(null);
+  const k = fnv(name) % S.tipShards;
+  if (!tipShards.has(k)) tipShards.set(k, getJSON(`data/tips/${k}.json`).catch(() => ({})));
+  return tipShards.get(k).then(t => t[name] || null);
+}
+// A printed text with a hover on every constant it names. `refs` are [start, stop, name], in characters.
+function withRefs(text, refs) {
+  if (!refs || !refs.length) return esc(text);
+  const cs = Array.from(text); let out = '', pos = 0;
+  for (const [s, t, c] of refs) {
+    if (s < pos || t > cs.length) continue;
+    out += esc(cs.slice(pos, s).join('')) + `<span class="term${byName.has(c) ? ' local' : ''}" data-c="${esc(c)}">${esc(cs.slice(s, t).join(''))}</span>`;
+    pos = t;
+  }
+  return out + esc(cs.slice(pos).join(''));
+}
+const firstSentence = doc => { const p = (doc || '').trim().split(/\n\s*\n/)[0].replace(/\s+/g, ' '); const m = p.match(/^.*?[.!?](?=\s|$)/); return m ? m[0] : p; };
+function tipHtml(name, t) {
+  if (!t) return `<div class="tip-sig">${esc(name)}</div><div class="tip-meta">Not described in this site's data.</div>`;
+  const [kind, sig, doc, pkg, local] = t;
+  return `<div class="tip-sig">${esc(sig || name)}</div><div class="tip-meta">${esc(kind)} · ${esc(pkg)}${local ? ` · <a href="${declHref(name)}">open</a>` : ''}</div>${doc ? `<div class="tip-doc">${md(doc)}</div>` : '<div class="tip-meta">No docstring.</div>'}`;
+}
+function setupTips() {
+  const tip = document.createElement('div'); tip.className = 'tip'; tip.hidden = true; document.body.appendChild(tip);
+  let showTimer = null, hideTimer = null, current = null;
+  const hide = () => { tip.hidden = true; current = null; };
+  const place = el => {
+    const r = el.getBoundingClientRect(), w = Math.min(560, window.innerWidth - 24);
+    tip.style.width = w + 'px';
+    tip.style.left = Math.max(12, Math.min(r.left, window.innerWidth - w - 12)) + window.scrollX + 'px';
+    const below = r.bottom + 6, h = tip.offsetHeight;
+    tip.style.top = (below + h > window.innerHeight && r.top > h + 12 ? r.top - h - 6 : below) + window.scrollY + 'px';
+  };
+  document.addEventListener('mouseover', e => {
+    if (tip.contains(e.target)) { clearTimeout(hideTimer); return; }
+    const el = e.target.closest('[data-c]'); if (!el) return;
+    clearTimeout(hideTimer); clearTimeout(showTimer);
+    showTimer = setTimeout(async () => {
+      const name = el.dataset.c; current = el;
+      tip.innerHTML = `<div class="tip-sig">${esc(name)}</div>`; tip.hidden = false; place(el);
+      const t = await tipFor(name); if (current !== el) return;
+      tip.innerHTML = tipHtml(name, t); typeset(tip); place(el);
+    }, 140);
+  });
+  document.addEventListener('mouseout', e => {
+    const to = e.relatedTarget;
+    if (e.target.closest('[data-c]') || tip.contains(e.target)) {
+      clearTimeout(showTimer);
+      if (to && (tip.contains(to) || (current && current.contains(to)))) return;
+      hideTimer = setTimeout(hide, 220);
+    }
+  });
+  window.addEventListener('hashchange', hide);
+}
+
+/* ---------- the statement, taken apart ---------- */
+// Compact: each object on one line, the structure assumed on it after "with". Expanded: one
+// assumption per line, with a sentence about each from its head constant's docstring. One choice
+// for the whole site, remembered.
+let expanded = false;
+try { expanded = localStorage.getItem('trust-site:expanded') === '1'; } catch (e) { }
+function applyExpanded() {
+  document.body.classList.toggle('anat-expanded', expanded);
+  document.querySelectorAll('.expand-btn').forEach(b => { b.textContent = expanded ? 'Compact' : 'Expand'; b.setAttribute('aria-pressed', String(expanded)); b.title = expanded ? 'One line per object; hover a name for what it is' : 'One line per assumption, with a sentence about each'; });
+  if (expanded) fillGlosses(document);
+}
+function fillGlosses(root) {
+  root.querySelectorAll('.gloss[data-g]:not([data-done])').forEach(el => {
+    el.dataset.done = '1';
+    tipFor(el.dataset.g).then(t => { if (t && t[2]) { el.innerHTML = md(firstSentence(t[2]), true); typeset(el); } });
+  });
+}
+function anatomy(e) {
+  const st = e.statement; if (!st) return '';
+  const bs = st.binders || [];
+  const main = [], attached = new Map();
+  bs.forEach((b, i) => {
+    if (b.role === 'instance') {
+      let host = -1;
+      for (let j = main.length - 1; j >= 0; j--) { const n = bs[main[j]].name; if (n && new RegExp(`(^|[^\\w'.])${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^\\w'.])`).test(b.type)) { host = main[j]; break; } }
+      if (host >= 0) { (attached.get(host) || attached.set(host, []).get(host)).push(b); return; }
+    }
+    main.push(i);
+  });
+  const code = b => `<code>${b.name ? esc(b.name) + ' : ' : ''}${withRefs(b.type, b.typeRefs)}</code>`;
+  const gloss = h => h ? `<span class="gloss" data-g="${esc(h)}"></span>` : '';
+  const line = i => {
+    const b = bs[i], ins = attached.get(i) || [];
+    return `<div class="arow">${code(b)}${ins.length ? `<span class="inl">${ins.map(x => ` <span class="with">with</span> ${code(x)}`).join('')}</span>` : ''}
+      <div class="exp">${gloss(b.head)}${ins.map(x => `<div class="inst"><span class="with">assuming</span> ${code(x)} ${gloss(x.head)}</div>`).join('')}</div></div>`;
+  };
+  const group = (label, idx) => idx.length ? `<div class="k">${label}</div><div class="v">${idx.map(line).join('')}</div>` : '';
+  const types = main.filter(i => bs[i].role === 'type'), given = main.filter(i => bs[i].role === 'variable' || bs[i].role === 'instance'), hyp = main.filter(i => bs[i].role === 'hypothesis');
+  let h = '<div class="anat">' + group('Types', types) + group('Given', given) + group('Assuming', hyp);
+  const box = (label, text, refs, head) => `<div class="k">${label}</div><div class="v"><div class="box">${withRefs(text, refs)}</div>${head ? `<div class="exp">${gloss(head)}</div>` : ''}</div>`;
+  if (e.isProp) h += box('Then', st.conclusion, st.conclusionRefs);
+  else {
+    h += box('Result', st.conclusion, st.conclusionRefs, st.conclusionHead);
+    if (st.value) h += box('Body', st.value, st.valueRefs);
+    for (const [key, label] of [['fields', 'Fields'], ['constructors', 'Constructors']])
+      if (st[key]) h += `<div class="k">${label}</div><div class="v">${st[key].map(f => `<div class="arow"><code>${esc(f.name)} : ${withRefs(f.type, f.typeRefs)}</code></div>`).join('')}</div>`;
+  }
+  return h + '</div>';
+}
+// A declaration's card, as its page shows it and as a graph shows it for a clicked node.
+function cardHtml(e) {
+  const cls = e.isProp ? 'lemma' : kindClass(e.kind);
+  let h = `<div class="card ${cls}"><div class="card-head"><span class="kind">${esc(e.kind)}${e.claim ? ' · claim' : ''}</span>${e.statement ? `<button class="btn expand-btn" type="button">${expanded ? 'Compact' : 'Expand'}</button>` : ''}</div>`;
+  if (e.doc) h += `<div class="authors"><div class="lbl">From the authors</div><div class="body">${md(e.doc)}</div></div>`;
+  h += anatomy(e);
+  if (e.code) h += `<details><summary>Code</summary><pre>${esc(e.code)}</pre>${e.source?.url ? `<a href="${esc(e.source.url)}">${esc(e.source.path)}:${e.source.start}</a>` : ''}</details>`;
+  if (e.proof) h += `<details><summary>Proof</summary><pre>${esc(e.proof)}</pre></details>`;
+  return h + '</div>';
+}
+
+/* ---------- the reader's verdict, as a control ---------- */
+function auditControl(name) {
+  const row = byName.get(name), v = verdictOf(name);
+  return `<div class="audit" data-audit="${esc(name)}"><div class="top"><span><b>Your audit</b><code>${esc(name)}</code></span><span>private to this browser</span></div>
+    <div class="seg"><button data-v="">unread</button><button data-v="accepted">accepted</button><button data-v="query">query</button>
+    ${S.issuesRepo ? `<a class="btn" style="margin-left:auto" target="_blank" rel="noopener" href="https://github.com/${esc(S.issuesRepo)}/issues/new?title=${encodeURIComponent('About ' + name)}&body=${encodeURIComponent(`About \`${name}\` (meaning hash ${row ? row[R.MEANING] : '?'}, commit ${S.commit}):\n\n`)}">Open an issue</a>` : ''}</div>
+    <textarea class="note" placeholder="Note — what you would ask the author">${esc(v.note || '')}</textarea><div class="stale-note">${v.stale ? `You marked this ${esc(v.verdict)} on an earlier version; it has changed since.` : ''}</div></div>`;
+}
+function wireAudit(root) {
+  root.querySelectorAll('[data-audit]:not([data-wired])').forEach(box => {
+    box.dataset.wired = '1';
+    const name = box.dataset.audit, note = $('textarea', box);
+    const paint = () => box.querySelectorAll('[data-v]').forEach(b => b.classList.toggle('on', (verdictOf(name).verdict || '') === b.dataset.v));
+    paint();
+    box.querySelectorAll('[data-v]').forEach(b => b.onclick = () => { setVerdict(name, b.dataset.v || null, note.value); paint(); });
+    note.onchange = () => setVerdict(name, verdictOf(name).verdict, note.value);
+    document.addEventListener('trust-site:audit', paint);
+  });
+}
+
 /* ---------- layered graphs ---------- */
+// Rows by longest-path depth: what rests on nothing at the top, each node one row below its
+// bottom-most dependency. Deterministic, so nothing moves under the cursor. Upstream nodes, when a
+// graph has them, sit in a band above, grouped by package.
 function layout(nodes, edges) {
-  // edges: [from, to] meaning `from` rests on `to`; rows go from what rests on nothing (top) down.
   const deps = new Map(nodes.map(n => [n.id, []])), users = new Map(nodes.map(n => [n.id, []]));
   for (const [a, b] of edges) { if (deps.has(a) && deps.has(b)) { deps.get(a).push(b); users.get(b).push(a); } }
   const row = new Map(), visiting = new Set();
@@ -169,79 +311,160 @@ function layout(nodes, edges) {
     let r = 0; for (const t of deps.get(id)) r = Math.max(r, depth(t) + 1);
     visiting.delete(id); row.set(id, r); return r;
   };
-  nodes.forEach(n => depth(n.id));
-  const rows = []; for (const n of nodes) (rows[row.get(n.id)] ||= []).push(n.id);
-  for (const r of rows) r?.sort((a, b) => String(labelOf(nodes, a)).localeCompare(labelOf(nodes, b)));
-  const pos = new Map(); const place = () => rows.forEach(r => r?.forEach((id, i) => pos.set(id, i)));
-  place();
+  const byId = new Map(nodes.map(n => [n.id, n]));
+  nodes.forEach(n => { if (n.upstream) row.set(n.id, -1); });
+  nodes.forEach(n => { if (!n.upstream) depth(n.id); });
+  const rows = []; for (const n of nodes) { const r = row.get(n.id) + 1; (rows[r] ||= []).push(n.id); }
+  for (let k = 0; k < rows.length; k++) rows[k] ||= [];
+  const lab = id => byId.get(id).label;
+  rows[0].sort((a, b) => (byId.get(a).upstream || '').localeCompare(byId.get(b).upstream || '') || lab(a).localeCompare(lab(b)));
+  for (const r of rows.slice(1)) r.sort((a, b) => lab(a).localeCompare(lab(b)));
+  const pos = new Map(); rows.forEach(r => r.forEach((id, i) => pos.set(id, i)));
   for (let pass = 0; pass < 6; pass++) {
     const down = pass % 2 === 0;
-    for (let k = down ? 1 : rows.length - 2; down ? k < rows.length : k >= 0; k += down ? 1 : -1) {
-      const r = rows[k]; if (!r) continue;
+    for (let k = down ? 1 : rows.length - 2; down ? k < rows.length : k >= 1; k += down ? 1 : -1) {
+      const r = rows[k];
       const bary = id => { const ns = (down ? deps : users).get(id).filter(x => pos.has(x)); return ns.length ? ns.reduce((s, x) => s + pos.get(x), 0) / ns.length : pos.get(id); };
       r.sort((a, b) => bary(a) - bary(b)); r.forEach((id, i) => pos.set(id, i));
     }
   }
-  return {rows: rows.map(r => r || []), row, deps, users};
+  return {rows, deps, users, byId};
 }
-const labelOf = (nodes, id) => (nodes.find(n => n.id === id) || {}).label || '';
 const kindClass = k => /Definition|Instance|Opaque|Axiom/.test(k) ? 'definition' : (/Structure|Class|Inductive/.test(k) ? 'structure' : 'lemma');
-function graph(host, nodes, edges, opts = {}) {
-  const L = layout(nodes, edges), byId = new Map(nodes.map(n => [n.id, n]));
-  const W = n => Math.min(26, n.label.length) * 7.1 + 18, H = 26, GAP = 14, ROWH = 58, PAD = 40;
+function transitiveReduction(ids, edges) {
+  const adj = new Map(ids.map(i => [i, new Set()])); for (const [a, b] of edges) if (adj.has(a) && adj.has(b) && a !== b) adj.get(a).add(b);
+  const reach = (a, skip) => { const s = new Set(), st = [...adj.get(a)].filter(x => x !== skip); while (st.length) { const x = st.pop(); if (s.has(x)) continue; s.add(x); st.push(...adj.get(x)); } return s; };
+  const out = []; for (const [a, bs] of adj) for (const b of bs) if (!reach(a, b).has(b)) out.push([a, b]); return out;
+}
+let graphStack = false; try { graphStack = localStorage.getItem('trust-site:graph-stack') === '1'; } catch (e) { }
+/* spec: {nodes: [{id, label, title, kind, href, summary, root, sorry, audit (a declaration name),
+   upstream (its package, for a band node), trusted}], edges: [[user, dependency]], unit, caption,
+   card: node → Promise<html> for the panel under the picture}                                   */
+function graph(host, spec) {
+  const {nodes} = spec, unit = spec.unit || 'declaration', units = unit + 's';
+  const edges = spec.reduce === false ? spec.edges : transitiveReduction(nodes.map(n => n.id), spec.edges);
+  const L = layout(nodes, edges), byId = L.byId;
+  const lone = nodes.length <= 1;
+  const W = n => Math.min(26, n.label.length) * 7.1 + 22, H = 26, GAP = 14, ROWH = 58, PAD = 44;
   const coords = new Map(); let width = 0;
   L.rows.forEach((r, k) => { let x = 0; r.forEach(id => { const w = W(byId.get(id)); coords.set(id, {x, y: k * ROWH + PAD, w}); x += w + GAP; }); width = Math.max(width, x); });
-  L.rows.forEach(r => { const rw = r.reduce((s, id) => s + coords.get(id).w + GAP, -GAP); const off = (width - rw) / 2; r.forEach(id => coords.get(id).x += off + 60); });
-  const height = L.rows.length * ROWH + PAD * 2; width += 120;
-  const color = n => n.root ? ['var(--root)', 'var(--root)', '#fff'] : ({definition: ['var(--def-bg)', 'var(--def)'], structure: ['var(--struct-bg)', 'var(--struct)'], lemma: ['var(--lemma-bg)', 'var(--lemma)']}[kindClass(n.kind)].concat(['var(--text)']));
+  L.rows.forEach(r => { const rw = r.reduce((s, id) => s + coords.get(id).w + GAP, -GAP); const off = (width - rw) / 2; r.forEach(id => coords.get(id).x += off + 70); });
+  const height = L.rows.length * ROWH + PAD * 2; width += 140;
+  const hasBand = L.rows[0].length > 0;
+  const fillOf = n => n.root ? ['var(--root)', 'var(--root)', '#fff'] : n.upstream ? ['var(--band)', 'var(--faint)', 'var(--text)']
+    : ({definition: ['var(--def-bg)', 'var(--def)'], structure: ['var(--struct-bg)', 'var(--struct)'], lemma: ['var(--lemma-bg)', 'var(--lemma)']}[kindClass(n.kind)] || ['var(--lemma-bg)', 'var(--lemma)']).concat(['var(--text)']);
   const trunc = s => s.length > 26 ? s.slice(0, 25) + '…' : s;
-  let svg = `<svg viewBox="0 0 ${width} ${height}"><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="var(--faint)"/></marker></defs><g class="vp">`;
-  L.rows.forEach((r, k) => { if (k % 2 === 1) svg += `<rect class="band" x="-5000" y="${k * ROWH + PAD - 16}" width="${width + 10000}" height="${ROWH}"/>`; if (opts.rowNumbers !== false && k > 0) svg += `<text class="rowlbl" x="18" y="${k * ROWH + PAD + 17}">${k}</text>`; });
+  let svg = `<svg><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="var(--faint)"/></marker><marker id="ahh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="var(--link)"/></marker></defs><g class="vp">`;
+  L.rows.forEach((r, k) => {
+    if (k === 0 && hasBand) svg += `<rect class="bandbg" x="-5000" y="${PAD - 16}" width="${width + 10000}" height="${ROWH}"/><text class="rowlbl" x="12" y="${PAD + 17}">upstream</text>`;
+    else if (k > 0) { if (k % 2 === 0) svg += `<rect class="band" x="-5000" y="${k * ROWH + PAD - 16}" width="${width + 10000}" height="${ROWH}"/>`; if (k > 1) svg += `<text class="rowlbl" x="18" y="${k * ROWH + PAD + 17}">${k - 1}</text>`; }
+  });
   for (const [a, b] of edges) {
     const p = coords.get(b), q = coords.get(a); if (!p || !q) continue;
     const x1 = p.x + p.w / 2, y1 = p.y + H, x2 = q.x + q.w / 2, y2 = q.y - 2, m = (y1 + y2) / 2;
     svg += `<path class="edge" data-a="${a}" data-b="${b}" d="M${x1},${y1} C${x1},${m} ${x2},${m} ${x2},${y2}" marker-end="url(#ah)"/>`;
   }
   for (const n of nodes) {
-    const c = coords.get(n.id), [fill, stroke, ink] = color(n);
-    svg += `<g class="node" data-id="${n.id}" transform="translate(${c.x},${c.y})"><rect width="${c.w}" height="${H}" rx="7" fill="${fill}" stroke="${stroke}"/><text x="${c.w / 2}" y="17" text-anchor="middle" fill="${ink}">${esc(trunc(n.label))}</text><title>${esc(n.title || n.label)}</title></g>`;
+    const c = coords.get(n.id), [fill, stroke, ink] = fillOf(n);
+    const dash = n.sorry ? ' stroke-dasharray="4 3" style="stroke:var(--warn)"' : ((n.upstream && !n.trusted) || n.untrusted ? ' stroke-dasharray="4 3"' : '');
+    svg += `<g class="node" data-id="${n.id}" transform="translate(${c.x},${c.y})"><rect width="${c.w}" height="${H}" rx="7" fill="${fill}" stroke="${stroke}"${dash}/><text x="${c.w / 2}" y="17" text-anchor="middle" fill="${ink}">${esc(trunc(n.label))}</text><g class="mark"></g><title>${esc((n.kind ? n.kind + ': ' : '') + (n.title || n.label))}</title></g>`;
   }
   svg += '</g></svg>';
-  host.innerHTML = `<div class="tools"><input placeholder="Filter ${opts.what || 'declarations'} by name"><button class="btn" data-a="fit">Fit view</button><button class="btn" data-a="clear">Clear focus</button>${opts.restsOn !== false ? '<button class="btn" data-a="rests">Everything it rests on</button>' : ''}</div>
+  const key = [
+    ['Rows', `Dependency depth among this project's ${units}: the first row depends on nothing, and each ${unit} sits one row below its bottom-most dependency.`],
+    ['Arrows', 'Point from a dependency down to what uses it.'],
+    spec.reduce === false ? null : ['Missing edges', `An edge implied by a longer path is not drawn, so what you see is the essential structure. Every ${unit} it connects is still reachable along the path that remains.`],
+    nodes.some(n => n.root) ? ['Filled node', `The ${unit} this page is about.`] : null,
+    nodes.some(n => n.sorry) ? ['Amber dashed outline', 'Depends on <code>sorry</code>: something in its closure is unproved.'] : null,
+    hasBand ? ['Top band', `Upstream declarations its statement names directly, grouped by package: what the statement is <em>about</em> from outside the project — by default only those from unaudited packages. Click one for its signature and docstring.`] : null,
+    nodes.some(n => n.upstream && !n.trusted) ? ['Grey dashed outline', 'From an upstream package nobody has vouched for: trusting this result means trusting it.'] : null,
+    nodes.some(n => n.audit) ? ['Green ✓, amber ?', 'Your verdicts: accepted, or queried. Neither means unread — or accepted when it meant something else.'] : null,
+  ].filter(Boolean);
+  host.innerHTML = lone ? `<p class="hint">One node, no edges: this ${unit} rests on nothing else drawn here.</p>` : `<div class="tools"><input type="search" placeholder="Filter ${units} by name"><button class="btn" data-a="fit">Fit view</button><button class="btn" data-a="clear">Clear focus</button>${spec.card ? `<button class="btn" data-a="stack" aria-pressed="${graphStack}" title="Open a card for the clicked ${unit} and for everything above it in the picture, in the order the rows draw them">Everything it rests on</button>` : ''}${spec.extra ? `<button class="btn" data-a="extra" aria-pressed="${!!spec.extra.pressed}">${esc(spec.extra.label)}</button>` : ''}</div>
     <div class="hint">Scroll to zoom, drag to pan, click a node to read it below, double-click to open its page.</div>
-    <div class="canvas${L.rows.length > 7 ? ' tall' : ''}">${svg}</div><div class="info">${esc(opts.caption || '')}</div>`;
-  const canvas = $('.canvas', host), vp = $('.vp', host), info = $('.info', host), svgEl = $('svg', host);
-  let tx = 0, ty = 0, sc = 1, focus = null;
+    <details class="gkey"><summary>What the layout and marks mean</summary><dl>${key.map(([t, d]) => `<dt>${t}</dt><dd>${d}</dd>`).join('')}</dl></details>
+    <div class="canvas${L.rows.length > 7 ? ' tall' : ''}">${svg}</div><div class="gcard"></div>`;
+  if (lone) return;
+  const canvas = $('.canvas', host), vp = $('.vp', host), svgEl = $('svg', host), cardBox = $('.gcard', host), gkey = $('.gkey', host);
+  try { gkey.open = localStorage.getItem('trust-site:graph-key') === 'open'; } catch (e) { }
+  gkey.addEventListener('toggle', () => { try { localStorage.setItem('trust-site:graph-key', gkey.open ? 'open' : 'closed'); } catch (e) { } });
+  let tx = 0, ty = 0, sc = 1, sel = null, filterSet = null;
   const apply = () => vp.setAttribute('transform', `translate(${tx},${ty}) scale(${sc})`);
-  // Fit the whole graph when it stays readable; otherwise open at a readable zoom on its top rows.
-  const fit = (all = false) => { const b = canvas.getBoundingClientRect(); let s = Math.min(b.width / width, b.height / height, 1.4); svgEl.setAttribute('viewBox', `0 0 ${b.width} ${b.height}`);
+  const fit = (all = false) => { const b = canvas.getBoundingClientRect(); svgEl.setAttribute('viewBox', `0 0 ${b.width} ${b.height}`); const s = Math.min(b.width / width, b.height / height, 1.4);
     if (s >= 0.7 || all) { sc = s; tx = (b.width - width * s) / 2; ty = (b.height - height * s) / 2; } else { sc = 0.8; tx = (b.width - width * sc) / 2; ty = 10; } apply(); };
-  requestAnimationFrame(fit);
+  requestAnimationFrame(() => fit());
   canvas.addEventListener('wheel', e => { e.preventDefault(); const b = canvas.getBoundingClientRect(); const mx = e.clientX - b.left, my = e.clientY - b.top; const f = Math.exp(-e.deltaY * 0.0015); tx = mx - (mx - tx) * f; ty = my - (my - ty) * f; sc *= f; apply(); }, {passive: false});
-  let drag = null;
-  canvas.addEventListener('pointerdown', e => { drag = {x: e.clientX, y: e.clientY, tx, ty}; canvas.setPointerCapture(e.pointerId); canvas.style.cursor = 'grabbing'; });
-  canvas.addEventListener('pointermove', e => { if (drag) { tx = drag.tx + e.clientX - drag.x; ty = drag.ty + e.clientY - drag.y; apply(); } });
-  canvas.addEventListener('pointerup', () => { drag = null; canvas.style.cursor = ''; });
-  const highlight = set => {
-    host.querySelectorAll('.node').forEach(g => g.classList.toggle('dim', !!set && !set.has(+g.dataset.id)));
-    host.querySelectorAll('.edge').forEach(p => { const on = set && set.has(+p.dataset.a) && set.has(+p.dataset.b); p.classList.toggle('dim', !!set && !on); p.classList.toggle('hot', !!set && on); });
-  };
-  const restsOn = id => { const s = new Set([id]), st = [id]; while (st.length) { const x = st.pop(); for (const t of L.deps.get(x) || []) if (!s.has(t)) { s.add(t); st.push(t); } } return s; };
-  const show = id => { const n = byId.get(id); focus = id; info.innerHTML = `<b>${esc(n.label)}</b> — ${esc(n.kind || '')}${n.summary ? ': ' + esc(n.summary) : ''} ${n.href ? `<a href="${n.href}">open</a>` : ''}`; highlight(new Set([id, ...(L.deps.get(id) || []), ...(L.users.get(id) || [])])); };
-  host.querySelectorAll('.node').forEach(g => {
-    g.addEventListener('click', e => { e.stopPropagation(); show(+g.dataset.id); });
-    g.addEventListener('dblclick', () => { const n = byId.get(+g.dataset.id); if (n.href) location.hash = n.href; });
+  // A press becomes a drag only once it has moved: a click on a node must reach the node.
+  let press = null, lastClick = {id: null, t: 0};
+  canvas.addEventListener('pointerdown', e => { if (e.button !== 0) return; press = {x: e.clientX, y: e.clientY, tx, ty, node: e.target.closest('.node'), drag: false, pid: e.pointerId}; });
+  canvas.addEventListener('pointermove', e => {
+    if (!press) return;
+    if (!press.drag && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 4) { press.drag = true; canvas.setPointerCapture(press.pid); canvas.classList.add('dragging'); }
+    if (press.drag) { tx = press.tx + e.clientX - press.x; ty = press.ty + e.clientY - press.y; apply(); }
   });
+  canvas.addEventListener('pointerup', () => {
+    const p = press; press = null; canvas.classList.remove('dragging'); if (!p || p.drag) return;
+    if (!p.node) { select(null); return; }
+    const id = +p.node.dataset.id, now = Date.now();
+    if (lastClick.id === id && now - lastClick.t < 400) { const n = byId.get(id); if (n.href) location.hash = n.href; return; }
+    lastClick = {id, t: now}; select(sel === id ? null : id);
+  });
+  host.querySelectorAll('.node').forEach(g => {
+    g.addEventListener('mouseenter', () => { if (!press) highlight(+g.dataset.id); });
+    g.addEventListener('mouseleave', () => { if (!press) highlight(sel); });
+  });
+  function near(id) { return new Set([id, ...(L.deps.get(id) || []), ...(L.users.get(id) || [])]); }
+  function highlight(id) {
+    const on = id != null ? near(id) : filterSet;
+    host.querySelectorAll('.node').forEach(g => { const i = +g.dataset.id; g.classList.toggle('dim', !!on && !on.has(i)); g.classList.toggle('sel', i === sel); });
+    host.querySelectorAll('.edge').forEach(p => { const a = +p.dataset.a, b = +p.dataset.b; const hot = id != null && (a === id || b === id);
+      p.classList.toggle('hot', hot); p.setAttribute('marker-end', hot ? 'url(#ahh)' : 'url(#ah)'); p.classList.toggle('dim', !!on && !hot && !(on.has(a) && on.has(b) && id == null)); });
+  }
+  function paintMarks() {
+    host.querySelectorAll('.node').forEach(g => {
+      const n = byId.get(+g.dataset.id), m = $('.mark', g); if (!n.audit) return;
+      const v = verdictOf(n.audit), c = coords.get(n.id);
+      const glyph = v.verdict && !v.stale ? (v.verdict === 'accepted' ? '✓' : '?') : '';
+      m.innerHTML = glyph ? `<circle cx="${c.w - 2}" cy="0" r="7" fill="${glyph === '✓' ? 'var(--good)' : 'var(--warn)'}"/><text x="${c.w - 2}" y="3.5" text-anchor="middle" fill="#fff" style="font:700 10px var(--sans)">${glyph}</text>` : '';
+    });
+  }
+  paintMarks(); document.addEventListener('trust-site:audit', paintMarks);
+  const ancestors = id => {
+    const seen = new Set([id]), st = [id];
+    while (st.length) for (const t of L.deps.get(st.pop()) || []) if (!seen.has(t)) { seen.add(t); st.push(t); }
+    const rowOf = new Map(); L.rows.forEach((r, k) => r.forEach(x => rowOf.set(x, k)));
+    const keep = [...seen].filter(x => x === id || byId.get(x).href);
+    keep.sort((a, b) => rowOf.get(a) - rowOf.get(b) || byId.get(a).label.localeCompare(byId.get(b).label));
+    return {ids: keep, dropped: seen.size - keep.length};
+  };
+  const loader = 'IntersectionObserver' in window ? new IntersectionObserver((es, obs) => { for (const e of es) if (e.isIntersecting) { obs.unobserve(e.target); load(e.target); } }, {rootMargin: '600px 0px'}) : null;
+  function load(body) {
+    const n = byId.get(+body.dataset.node); if (!spec.card || !n) return;
+    spec.card(n).then(html => { if (html && body.isConnected) { body.innerHTML = html; typeset(body); applyExpanded(); wireAudit(body.parentElement); } });
+  }
+  function select(id) {
+    sel = id; highlight(id);
+    if (id == null) { cardBox.innerHTML = `<p class="hint">${esc(spec.caption || '')}</p>`; return; }
+    const stack = graphStack && spec.card ? ancestors(id) : {ids: [id], dropped: 0};
+    const lead = stack.ids.length > 1 ? `<p class="lead-note">${plural(stack.ids.length, unit)}: <code>${esc(byId.get(id).title || byId.get(id).label)}</code> and everything it rests on, in the order the rows read — what depends on nothing first, the clicked ${unit} last.${stack.dropped ? ` Its ${plural(stack.dropped, 'upstream constant')} are not listed; click one in the picture for its signature.` : ''}</p>` : '';
+    cardBox.innerHTML = lead + stack.ids.map(i => { const n = byId.get(i); return `<section class="gentry"><div class="ghead"><h3><code>${esc(n.title || n.label)}</code></h3>${n.href ? `<a class="btn" href="${n.href}">Open ${unit}</a>` : ''}</div>${n.sorry ? '<p class="warnline">⚠ depends on <code>sorry</code></p>' : ''}${n.upstream && !n.trusted ? `<p class="warnline">⚠ not audited — from <code>${esc(n.upstream)}</code></p>` : ''}<div class="gbody" data-node="${i}">${n.summary ? `<p class="muted">${esc(n.summary)}</p>` : ''}</div>${n.audit ? auditControl(n.audit) : ''}</section>`; }).join('');
+    wireAudit(cardBox);
+    cardBox.querySelectorAll('.gbody').forEach(b => loader ? loader.observe(b) : load(b));
+    const head = $('.lead-note, .ghead', cardBox); if (head) head.scrollIntoView({block: 'nearest', behavior: 'smooth'});
+  }
   host.querySelector('[data-a="fit"]').onclick = () => fit(true);
-  host.querySelector('[data-a="clear"]').onclick = () => { focus = null; highlight(null); info.textContent = opts.caption || ''; };
-  const rb = host.querySelector('[data-a="rests"]');
-  if (rb) rb.onclick = () => { const id = focus ?? nodes.find(n => n.root)?.id; if (id != null) highlight(restsOn(id)); };
-  $('input', host).addEventListener('input', e => { const q = e.target.value.trim().toLowerCase(); highlight(q ? new Set(nodes.filter(n => n.label.toLowerCase().includes(q) || (n.title || '').toLowerCase().includes(q)).map(n => n.id)) : null); });
+  host.querySelector('[data-a="clear"]').onclick = () => { $('input', host).value = ''; filterSet = null; select(null); };
+  const xb = host.querySelector('[data-a="extra"]'); if (xb) xb.onclick = spec.extra.onClick;
+  const sb = host.querySelector('[data-a="stack"]');
+  if (sb) sb.onclick = () => { graphStack = !graphStack; sb.setAttribute('aria-pressed', String(graphStack)); try { localStorage.setItem('trust-site:graph-stack', graphStack ? '1' : '0'); } catch (e) { } if (sel != null) select(sel); };
+  $('input', host).addEventListener('input', e => { const q = e.target.value.trim().toLowerCase(); filterSet = q ? new Set(nodes.filter(n => n.label.toLowerCase().includes(q) || (n.title || '').toLowerCase().includes(q)).map(n => n.id)) : null; highlight(sel); });
+  select(null);
 }
-function transitiveReduction(ids, edges) {
-  const adj = new Map(ids.map(i => [i, new Set()])); for (const [a, b] of edges) if (adj.has(a) && adj.has(b) && a !== b) adj.get(a).add(b);
-  const reach = (a, skip) => { const s = new Set(), st = [...adj.get(a)].filter(x => x !== skip); while (st.length) { const x = st.pop(); if (s.has(x)) continue; s.add(x); st.push(...adj.get(x)); } return s; };
-  const out = []; for (const [a, bs] of adj) for (const b of bs) if (!reach(a, b).has(b)) out.push([a, b]); return out;
+// The card of a node of a declaration graph: a declaration of the site, or an upstream constant.
+async function nodeCard(n) {
+  if (n.href && n.audit) { const e = await declData(n.audit); return e ? cardHtml(e) : null; }
+  if (n.upstream !== undefined || n.constant) { const t = await tipFor(n.constant || n.title); return `<div class="card upstream">${tipHtml(n.constant || n.title, t)}</div>`; }
+  return null;
 }
 
 /* ---------- pages ---------- */
@@ -291,9 +514,8 @@ function moduleGraph(host, ids) {
   for (const m of ids) for (const t of S.modules[m].uses) if (set.has(t)) edges.push([m, t]);
   const linked = new Set(edges.flat());
   const shown = ids.filter(i => linked.has(i) || ids.length < 12);
-  const nodes = shown.map(i => ({id: i, label: S.modules[i].short.split('.').slice(-2).join('.'), title: S.modules[i].name, kind: 'module', href: modHref(i), summary: S.modules[i].title}));
-  const red = transitiveReduction(shown, edges);
-  graph(host, nodes, red, {what: 'modules', caption: `${plural(shown.length, 'module')}${shown.length < ids.length ? ` that depend on one another; the other ${ids.length - shown.length} are independent of the rest` : ''}.`});
+  const nodes = shown.map(i => ({id: i, label: S.modules[i].short.split('.').slice(-2).join('.'), title: S.modules[i].name, kind: 'Module', href: modHref(i), summary: S.modules[i].title || `${S.modules[i].decls} declarations`}));
+  graph(host, {nodes, edges, unit: 'module', caption: `${plural(shown.length, 'module')}${shown.length < ids.length ? ` that depend on one another; the other ${ids.length - shown.length} are independent of the rest` : ''}. Click a node to read it here.`});
 }
 function renderChapter(id) {
   const i = chapterIndex.get(id), ch = S.chapters[i]; if (!ch) return notFound();
@@ -315,33 +537,6 @@ async function renderModule(i) {
   return h + '</ul>';
 }
 
-function anatomy(e) {
-  const st = e.statement; if (!st) return '';
-  const bs = st.binders || [];
-  // Attach each instance to the latest earlier binder its type mentions.
-  const main = [], attached = new Map();
-  bs.forEach((b, i) => {
-    if (b.role === 'instance') {
-      let host = -1;
-      for (let j = main.length - 1; j >= 0; j--) { const n = bs[main[j]].name; if (n && new RegExp(`(^|[^\\w'.])${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^\\w'.])`).test(b.type)) { host = main[j]; break; } }
-      if (host >= 0) { (attached.get(host) || attached.set(host, []).get(host)).push(b); return; }
-    }
-    main.push(i);
-  });
-  const withs = i => (attached.get(i) || []).map(b => `<span class="with">with</span>${b.name ? esc(b.name) + ' : ' : ''}${esc(b.type)}`).join(' ');
-  const line = i => `<div>${bs[i].name ? esc(bs[i].name) + ' : ' : ''}${esc(bs[i].type)} ${withs(i)}</div>`;
-  const group = (label, idx) => idx.length ? `<div class="k">${label}</div><div class="v">${idx.map(line).join('')}</div>` : '';
-  const types = main.filter(i => bs[i].role === 'type'), given = main.filter(i => bs[i].role === 'variable' || (bs[i].role === 'instance')), hyp = main.filter(i => bs[i].role === 'hypothesis');
-  let h = '<div class="anat">' + group('Types', types) + group('Given', given) + group('Assuming', hyp);
-  if (e.isProp) h += `<div class="k">Then</div><div class="v"><div class="box">${esc(st.conclusion)}</div></div>`;
-  else {
-    h += `<div class="k">Result</div><div class="v"><div class="box">${esc(st.conclusion)}</div></div>`;
-    if (st.value) h += `<div class="k">Body</div><div class="v"><div class="box">${esc(st.value)}</div></div>`;
-    if (st.fields) h += `<div class="k">Fields</div><div class="v">${st.fields.map(f => `<div>${esc(f.name)} : ${esc(f.type)}</div>`).join('')}</div>`;
-    if (st.constructors) h += `<div class="k">Constructors</div><div class="v">${st.constructors.map(f => `<div>${esc(f.name)} : ${esc(f.type)}</div>`).join('')}</div>`;
-  }
-  return h + '</div>';
-}
 async function renderDecl(name) {
   const e = await declData(name); if (!e) return notFound(name);
   const row = byName.get(name), mi = row[R.MOD];
@@ -350,15 +545,10 @@ async function renderDecl(name) {
   const next = k < entries.length - 1 ? [declHref(entries[k + 1].name), entries[k + 1].name] : null;
   let h = pager(prev, next) + `<h1 class="decl">${esc(name)}</h1>`;
   if (e.change) h += `<div class="changebar"><span class="badge ${e.change.class}">${CHANGE_LABEL[e.change.class]}</span> since the previous build${e.change.was ? ` (was <code>${esc(e.change.was)}</code>)` : ''}${e.change.causes?.length ? `: rewritten beneath it: ${e.change.causes.map(c => declLink(c)).join(', ')}` : ''}</div>`;
-  const cls = e.isProp ? 'lemma' : kindClass(e.kind);
-  h += `<div class="card ${cls}"><div class="kind">${esc(e.kind)}${e.claim ? ' · claim' : ''}</div>`;
-  if (e.doc) h += `<div class="authors"><div class="lbl">From the authors</div><div class="body">${md(e.doc)}</div></div>`;
-  h += anatomy(e);
-  if (e.code) h += `<details><summary>Code</summary><pre>${esc(e.code)}</pre>${e.source?.url ? `<a href="${esc(e.source.url)}">${esc(e.source.path)}:${e.source.start}</a>` : ''}</details>`;
-  if (e.proof) h += `<details><summary>Proof</summary><pre>${esc(e.proof)}</pre></details>`;
-  h += '</div><div class="facts">';
+  h += cardHtml(e);
+  h += '<div class="facts">';
   if (e.claim) h += `<p><b>Claim</b>${e.claim.label ? ` — ${esc(e.claim.label)}` : ''}, from ${esc(e.claim.source)}. <a href="#/claims">All claims</a>.</p>`;
-  if (e.specifies.length) h += `<p><b>Part of the specification of</b> ${e.specifies.map(s => declLink(s.target) + (s.comment ? ` <span class="muted">(${esc(s.comment)})</span>` : '')).join(', ')}.</p>`;
+  if (e.specifies.length) h += `<p><b>Part of the specification of</b> ${e.specifies.map(s => declLink(s.target) + (s.comment ? ` <span class="muted">(${md(s.comment, true)})</span>` : '')).join(', ')}.</p>`;
   if (e.specifiedBy.length) h += `<p><b>Specified by</b> ${e.specifiedBy.map(s => `${declLink(s.decl)}${s.kind !== 'specifies' ? ` <span class="muted">(${esc(s.kind)})</span>` : ''}${s.comment ? ` <span class="muted">— ${md(s.comment, true)}</span>` : ''}`).join(', ')}.</p>`;
   for (const c of e.characterizations) h += `<p><b>Characterized</b> by ${declLink(c.property)}${c.comment ? ` (${md(c.comment, true)})` : ''}: existence ${c.existence.map(x => declLink(x)).join(', ') || '<i>missing</i>'}; uniqueness ${c.uniqueness.map(u => declLink(u.decl) + (u.relation ? ` <span class="muted">up to <code>${esc(u.relation)}</code></span>` : '')).join(', ') || '<i>missing</i>'}.</p>`;
   if (!e.isProp && !e.specifiedBy.length && !e.characterizations.length && S.hasSpecs) h += `<p class="muted">No theorem is marked as specifying this definition.</p>`;
@@ -370,33 +560,41 @@ async function renderDecl(name) {
     h += `<p class="muted" style="font-size:14px">${p}</p>`;
   } else if (e.edited) h += `<p class="muted" style="font-size:14px">File last edited ${esc(e.edited.date)}.</p>`;
   if (e.reviews.length) h += `<h3>Published reviews</h3>` + e.reviews.map(r => `<div class="review ${esc(r.status)}"><b>${esc(r.verdict)}</b> by ${esc(r.by || 'someone')}${r.agent ? ' (AI agent)' : ''}, ${esc((r.at || '').slice(0, 10))} — <span class="muted">${esc(r.status)}</span>${r.rationale ? `<div>${md(r.rationale, true)}</div>` : ''}</div>`).join('');
-  const v = verdictOf(name);
-  h += `<div class="audit" id="audit"><div class="top"><span><b>Your audit</b><code>${esc(name)}</code></span><span>private to this browser</span></div>
-    <div class="seg"><button data-v="">unread</button><button data-v="accepted">accepted</button><button data-v="query">query</button><span class="faint" style="font-size:12px">a · q · u</span>
-    ${S.issuesRepo ? `<a class="btn" style="margin-left:auto" target="_blank" rel="noopener" href="https://github.com/${esc(S.issuesRepo)}/issues/new?title=${encodeURIComponent('About ' + name)}&body=${encodeURIComponent(`About \`${name}\` (meaning hash ${row[R.MEANING]}, commit ${S.commit}):\n\n`)}">Open an issue</a>` : ''}</div>
-    <textarea class="note" placeholder="Note — what you would ask the author">${esc(v.note || '')}</textarea>${v.stale ? `<div class="muted" style="font-size:13px">You marked this ${esc(v.verdict)} on an earlier version; it has changed since.</div>` : ''}</div>`;
+  h += auditControl(name);
   const b = beneath(row[R.ID]);
   h += `<h3>Dependency graph</h3><div class="graph" id="dg"></div>`;
   h += `<p><b>Audit surface:</b> ${plural(row[R.DEPS], 'project declaration')}, ${plural(row[R.EXT], 'external constant')}. ${b.total ? `${b.accepted}/${b.total} beneath accepted${b.covered ? ' — covered' : ''}.` : ''}</p>`;
   if (e.outside?.length) h += `<p class="muted">Outside this scoped site: ${e.outside.map(x => `<code>${esc(x)}</code>`).join(', ')}.</p>`;
-  if (e.external.length) h += `<details><summary class="muted">The external constants its statement rests on</summary><ul>${e.external.map(([n, p, k]) => `<li><code>${esc(n)}</code> <span class="muted">${esc(p)} · ${esc(k)}</span></li>`).join('')}</ul></details>`;
+  if (e.external.length) h += `<details><summary class="muted">The external constants its statement rests on</summary><ul>${e.external.map(([n, p, k]) => `<li><code data-c="${esc(n)}">${esc(n)}</code> <span class="muted">${esc(p)} · ${esc(k)}</span></li>`).join('')}</ul></details>`;
   h += e.sorry ? `<p>✗ <b>Not proved:</b> ${e.ownSorry ? 'it contains a <code>sorry</code> itself' : `it rests on a <code>sorry</code>, through ${e.sorryVia.map(x => declLink(x)).join(', ')}`}.</p>` : `<p>✓ <b>Proved:</b> no <code>sorry</code> anywhere in its closure${e.axioms.length ? `, but it rests on the axioms ${e.axioms.map(a => `<code>${esc(a)}</code>`).join(', ')}` : ''}.</p>`;
   h += `<p class="muted" style="font-size:14px">This is this tool's own reading of one build's recorded axioms, and it is not robust against an author who wants it to pass. Checking meant to be relied on should go through <a href="https://github.com/leanprover/comparator">Comparator</a>, which replays the proof through the kernel against an explicit list of permitted axioms.</p>`;
   if (e.users.length) h += `<details><summary class="muted">Used by ${plural(e.users.length, 'declaration')} of the ${scoped() ? 'site' : 'library'}</summary><ul>${e.users.map(i => `<li>${declLink(D[idIndex.get(i)][R.NAME])}</li>`).join('')}</ul></details>`;
   h += pager(prev, next);
   return [h, () => {
-    const box = $('#audit');
-    const paint = () => box.querySelectorAll('[data-v]').forEach(bt => bt.classList.toggle('on', (verdictOf(name).verdict || '') === bt.dataset.v));
-    paint();
-    box.querySelectorAll('[data-v]').forEach(bt => bt.onclick = () => { setVerdict(name, bt.dataset.v || null, $('textarea', box).value); paint(); });
-    $('textarea', box).onchange = ev => { const cur = verdictOf(name).verdict; setVerdict(name, cur, ev.target.value); };
-    document.onkeydown = ev => { if (ev.target.tagName === 'TEXTAREA' || ev.target.tagName === 'INPUT') return; const m = {a: 'accepted', q: 'query', u: null}; if (ev.key in m) { setVerdict(name, m[ev.key], $('textarea', box).value); paint(); } };
+    wireAudit($('#main'));
+    document.onkeydown = ev => { if (ev.target.tagName === 'TEXTAREA' || ev.target.tagName === 'INPUT') return; const m = {a: 'accepted', q: 'query', u: null}; if (ev.key in m) setVerdict(name, m[ev.key], ($('[data-audit] textarea') || {}).value); };
     const ids = [row[R.ID], ...closure(row[R.ID])];
-    const nodes = ids.map(i => { const r = D[idIndex.get(i)]; return {id: i, label: r[R.NAME].split('.').pop(), title: r[R.NAME], kind: r[R.KIND], href: declHref(r[R.NAME]), summary: r[R.SUMMARY], root: i === row[R.ID]}; });
+    if (ids.length > 600) { $('#dg').innerHTML = `<p class="muted">${plural(ids.length, 'declaration')}: too many to draw.</p>`; return; }
+    const nodes = ids.map(i => { const r = D[idIndex.get(i)]; return {id: i, label: r[R.NAME].split('.').pop(), title: r[R.NAME], kind: r[R.KIND], href: declHref(r[R.NAME]), summary: r[R.SUMMARY], root: i === row[R.ID], sorry: r[R.SORRY] > 0, audit: r[R.NAME]}; });
     const set = new Set(ids), edges = [];
     for (const i of ids) for (const t of G[i] || []) if (set.has(t)) edges.push([i, t]);
-    if (ids.length > 600) { $('#dg').innerHTML = `<p class="muted">${plural(ids.length, 'declaration')}: too many to draw.</p>`; return; }
-    graph($('#dg'), nodes, edges, {caption: `${plural(ids.length, 'declaration')} across the dependency rows; the top row depends on nothing. Click a node to read it here.`});
+    // The band: what the statement names directly from outside the project, the toolchain's own
+    // basics (`Nat`, `Eq`, …) left out. By default only what comes from an unaudited package — what
+    // this result has to be taken on trust for; the audited rest on request, remembered.
+    const pkgs = new Map(S.packages.map(p => [p.name, p]));
+    const direct = (e.directExternal || []).map(n => [n, (e.external.find(x => x[0] === n) || [n, '', ''])]).filter(([, x]) => x[1] && !pkgs.get(x[1])?.toolchain);
+    const audited = direct.filter(([, x]) => pkgs.get(x[1])?.trusted).length;
+    let showAudited = false; try { showAudited = localStorage.getItem('trust-site:graph-upstream') === '1'; } catch (err) { }
+    const draw = () => {
+      const ns = nodes.slice(), es = edges.slice();
+      direct.filter(([, x]) => showAudited || !pkgs.get(x[1])?.trusted).slice(0, 40).forEach(([n, x], j) => {
+        const id = -1 - j; ns.push({id, label: n.split('.').pop(), title: n, constant: n, kind: x[2], upstream: x[1], trusted: !!pkgs.get(x[1])?.trusted}); es.push([row[R.ID], id]); });
+      graph($('#dg'), {nodes: ns, edges: es, unit: 'declaration', card: nodeCard,
+        extra: audited ? {label: showAudited ? 'Hide audited upstream' : `Show audited upstream (${audited})`, pressed: showAudited,
+          onClick: () => { showAudited = !showAudited; try { localStorage.setItem('trust-site:graph-upstream', showAudited ? '1' : '0'); } catch (err) { } draw(); }} : null,
+        caption: `${plural(ids.length, 'declaration')} across the dependency rows; the top row depends on nothing. Click a node to read it here.`});
+    };
+    draw();
   }];
 }
 
@@ -510,9 +708,9 @@ function renderSorries() {
   for (const p of un) if (p.unaudited.length) h += `<details><summary>What the statements use from <b>${esc(p.name)}</b> (${p.statementConstants})</summary><ul>${p.unaudited.map(n => `<li><code>${esc(n)}</code></li>`).join('')}</ul></details>`;
   return [h, () => {
     const ids = S.packages.map((p, i) => i), idx = new Map(S.packages.map((p, i) => [p.name, i]));
-    const nodes = S.packages.map((p, i) => ({id: i, label: p.toolchain ? 'Lean' : p.name, kind: p.project ? 'Structure' : (p.trusted ? 'Lemma' : 'Definition'), summary: `${p.modules} modules${p.trusted ? ', trusted' : (p.project ? '' : ', unaudited')}`, root: !!p.project}));
+    const nodes = S.packages.map((p, i) => ({id: i, label: p.toolchain ? 'Lean' : p.name, title: p.toolchain ? 'Lean (the toolchain)' : p.name, kind: p.project ? 'This project' : (p.toolchain ? 'Toolchain, always trusted' : (p.trusted ? 'Audited package' : 'Unaudited package')), summary: `${p.modules} modules imported${p.project ? '' : `; the statements name ${plural(p.statementConstants, 'constant')} of it`}.`, root: !!p.project, untrusted: !p.trusted && !p.project}));
     const edges = []; S.packages.forEach((p, i) => p.requires.forEach(r => idx.has(r) && edges.push([i, idx.get(r)])));
-    graph($('#pg'), nodes, transitiveReduction(ids, edges), {what: 'packages', restsOn: false, caption: `${plural(nodes.length, 'package')} across the dependency rows; the top row depends on nothing.`});
+    graph($('#pg'), {nodes, edges, unit: 'package', caption: `${plural(nodes.length, 'package')} across the dependency rows; the top row depends on nothing. Click a node to read it here.`});
   }];
 }
 function renderChanges() {
@@ -596,7 +794,7 @@ async function route() {
       : a === 'changes' ? renderChanges() : a === 'c' ? renderChapter(b) : a === 'm' ? await renderModule(+b) : a === 'd' ? await renderDecl(b) : notFound();
   } catch (e) { r = `<h1>Error</h1><pre>${esc(e.stack || e)}</pre>`; }
   const [html, after] = Array.isArray(r) ? r : [r, null];
-  const main = $('#main'); main.innerHTML = html; typeset(main); if (after) after();
+  const main = $('#main'); main.innerHTML = html; typeset(main); if (after) after(); applyExpanded();
   document.querySelectorAll('.nav-links a').forEach(x => x.classList.toggle('here', x.dataset.k === a));
   document.querySelectorAll('#toc a').forEach(x => x.classList.toggle('here', a === 'c' && x.dataset.c === b));
   $('#side').classList.remove('open'); window.scrollTo(0, 0);
@@ -605,7 +803,8 @@ async function start() {
   [S, D, G] = await Promise.all([getJSON('data/site.json'), getJSON('data/decls.json'), getJSON('data/graph.json')]);
   D.forEach((r, i) => { byName.set(r[R.NAME], r); idIndex.set(r[R.ID], i); });
   S.hasSpecs = !!(S.specified && S.specified.length);
-  number(); loadAudit(); frame(); setupSearch();
+  number(); loadAudit(); frame(); setupSearch(); setupTips();
+  document.addEventListener('click', ev => { if (ev.target.closest('.expand-btn')) { expanded = !expanded; try { localStorage.setItem('trust-site:expanded', expanded ? '1' : '0'); } catch (e) { } applyExpanded(); } });
   window.addEventListener('hashchange', route); route();
 }
 document.addEventListener('DOMContentLoaded', () => start().catch(e => { $('#main').innerHTML = `<h1>Could not load the site</h1><pre>${esc(e.stack || e)}</pre>`; }));

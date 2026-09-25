@@ -20,7 +20,7 @@ from evidence_core import Dataset
 from trust_site import Options, build
 from trust_site import claims as claims_mod
 from trust_site import ledger as ledger_mod
-from trust_site.build import scoped
+from trust_site.build import scoped, shard_of
 from trust_site.changes import compare
 from trust_site.source import split_statement
 
@@ -129,6 +129,14 @@ class LedgerTests(unittest.TestCase):
         self.assertNotIn(F + "triple_three", led["decls"])
 
 
+class ShardTests(unittest.TestCase):
+    def test_the_hash_the_page_computes(self):
+        # FNV-1a over UTF-16 code units: the page computes the same (app.js, `fnv`).
+        self.assertEqual(shard_of("", 1 << 31), 0x811C9DC5 % (1 << 31))
+        self.assertEqual(shard_of("a", 1 << 32), 0xE40C292C)
+        self.assertEqual(shard_of("𝟚", 1 << 32), shard_of("𝟚", 1 << 32))
+
+
 class SourceTests(unittest.TestCase):
     def test_split(self):
         self.assertEqual(split_statement("theorem t (h : a = (b := c)) : x := by simp"),
@@ -162,6 +170,17 @@ class BuildTests(unittest.TestCase):
             self.assertTrue(pos["code"].startswith("@[claim") or "theorem triple_pos" in pos["code"])
             self.assertTrue(pos["proof"].startswith(":="))
             self.assertEqual(pos["claim"]["reference"], "Fixture, Theorem 1")
+            # Hovers: the statement's texts name their constants, and every constant named has a
+            # hover entry in the shard the page computes from its name.
+            refs = [r[2] for b in pos["statement"]["binders"] for r in b.get("typeRefs", [])] + \
+                [r[2] for r in pos["statement"].get("conclusionRefs", [])]
+            self.assertIn(F + "triple", refs)
+            tips = {}
+            for p in (out / "data" / "tips").glob("*.json"):
+                tips.update({n: (int(p.stem), t) for n, t in json.loads(p.read_text()).items()})
+            self.assertEqual(tips[F + "triple"][0], shard_of(F + "triple", site["tipShards"]))
+            self.assertEqual(tips[F + "triple"][1][0], "Definition")
+            self.assertTrue(tips[F + "triple"][1][1].startswith(F + "triple"))   # its signature
             double = next(e for e in entries if e["name"] == F + "double")
             self.assertEqual({s["decl"] for s in double["specifiedBy"]},
                              {F + "double_triple", F + "isDouble_double", F + "IsDouble.unique"})

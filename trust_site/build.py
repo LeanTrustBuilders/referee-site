@@ -52,6 +52,16 @@ class Options:
     issues_repo: str | None = None   # where "Open an issue" goes, if not the project's repository
 
 
+def shard_of(name: str, shards: int) -> int:
+    """The hover shard of a name: FNV-1a over its UTF-16 code units, as the page computes it."""
+    h = 0x811C9DC5
+    data = name.encode("utf-16-le")
+    for i in range(0, len(data), 2):
+        h ^= data[i] | (data[i + 1] << 8)
+        h = (h * 0x01000193) & 0xFFFFFFFF
+    return h % shards
+
+
 def split_camel(s: str) -> str:
     """`SequentialLearning` → `Sequential Learning`; `ForMathlib` → `For Mathlib`; `YDK2026` stays."""
     return re.sub(r"(?<=[a-z])(?=[A-Z])", " ", s)
@@ -259,11 +269,42 @@ def build(opt: Options) -> dict:
             "specifiedBy": spec_of.get(d.name, []),
             "characterizations": chars.get(d.name, []),
             "pulled": d.id in pulled,
+            "directExternal": sorted(by_id[t].name for t in meaning.get(d.id, ()) if not by_id[t].is_project),
             "provenance": ({"last": hist[d.name][-1][0], "changes": len(hist[d.name]), "first": hist[d.name][0][0]}
                            if d.name in hist else None),
             "edited": edited.get(srow["path"]) if srow else None,
         }
         shards[mod_index.get(d.module, -1)].append(entry)
+
+    # --- hovers -----------------------------------------------------------------------------------
+    # Every constant a statement in scope names, every declaration in scope, and every upstream
+    # constant a graph draws: its kind, signature, docstring and package, sharded by name so that a
+    # page loads only the shards of what the reader hovers.
+    signature = {n: rows[0].get("text", "") for n, rows in ds.facet("signature").items()}
+    named: set[str] = {d.name for d in scope}
+    for d in scope:
+        st = statements.get(d.name) or {}
+        texts = [b for b in st.get("binders", [])] + st.get("fields", []) + st.get("constructors", [])
+        for b in texts:
+            named.update(r[2] for r in b.get("typeRefs", []))
+            if b.get("head"):
+                named.add(b["head"])
+        for key in ("conclusionRefs", "valueRefs"):
+            named.update(r[2] for r in st.get(key, []))
+        if st.get("conclusionHead"):
+            named.add(st["conclusionHead"])
+        named.update(by_id[t].name for t in meaning.get(d.id, ()) if not by_id[t].is_project)
+    tips: dict[str, list] = {}
+    for n in named:
+        node = ds.by_name.get(n)
+        if node is None:
+            continue
+        kind = kind_label(node, keyword.get(n)) if node.is_project else \
+            ("Theorem" if node.is_prop else {"definition": "Definition", "instance": "Instance",
+             "structure": "Structure", "class": "Class", "inductive": "Inductive", "axiom": "Axiom",
+             "opaque": "Opaque", "constructor": "Constructor", "recursor": "Recursor"}.get(node.kind, node.kind.title()))
+        tips[n] = [kind, signature.get(n, ""), docs.get(n, ""), node.package, 1 if node.id in scope_set else 0]
+    tip_shards = max(1, -(-len(tips) // 1500))
 
     # --- packages and trust -----------------------------------------------------------------------
     packages = ds.packages
@@ -335,6 +376,7 @@ def build(opt: Options) -> dict:
                       for d in scope if not d.is_prop and (spec_of.get(d.name) or chars.get(d.name))],
         "evidence": {"records": sum(len(v) for v in reviews.values())} if reviews else None,
         "ledger": {"builds": led["builds"]} if led["builds"] else None,
+        "tipShards": tip_shards,
     }
 
     # --- write -------------------------------------------------------------------------------------
@@ -351,6 +393,12 @@ def build(opt: Options) -> dict:
     (out / "data" / "graph.json").write_text(json.dumps(graph, **compact), encoding="utf-8")
     for i, entries in shards.items():
         (out / "data" / "m" / f"{i}.json").write_text(json.dumps(entries, **compact), encoding="utf-8")
+    (out / "data" / "tips").mkdir()
+    by_shard: dict[int, dict] = defaultdict(dict)
+    for n, t in tips.items():
+        by_shard[shard_of(n, tip_shards)][n] = t
+    for k in range(tip_shards):
+        (out / "data" / "tips" / f"{k}.json").write_text(json.dumps(by_shard.get(k, {}), **compact), encoding="utf-8")
     return {"decls": len(scope), "modules": len(module_names), "claims": len(cl.claims),
             "warnings": cl.warnings}
 
