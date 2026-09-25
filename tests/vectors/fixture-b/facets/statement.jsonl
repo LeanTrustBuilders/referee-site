@@ -1,0 +1,21 @@
+{"binders":[{"explicit":true,"name":"n","role":"variable","type":"Nat"}],"conclusion":"Nat","decl":"Fixture.triple","value":"n + n + n"}
+{"binders":[],"conclusion":"¬IsSmall 12","decl":"Fixture.not_isSmall_twelve"}
+{"binders":[{"explicit":true,"name":"n","role":"variable","type":"Nat"}],"conclusion":"Nat","decl":"Fixture.double","value":"2 * n"}
+{"binders":[],"conclusion":"triple 3 = 9","decl":"Fixture.triple_three'"}
+{"binders":[],"conclusion":"𝟚0 = 0","decl":"Fixture.double_zero"}
+{"binders":[],"conclusion":"triple 1 = 1 + 1 + 1","decl":"Fixture.triple_one"}
+{"binders":[],"conclusion":"0 < 1","decl":"Fixture.one_pos'"}
+{"binders":[{"explicit":true,"name":"b","role":"variable","type":"Nat"}],"conclusion":"triple b = b + b + b","decl":"Fixture.triple_comm"}
+{"binders":[{"explicit":true,"name":"n","role":"variable","type":"Nat"}],"conclusion":"Prop","decl":"Fixture.IsSmall","value":"n < 10"}
+{"binders":[],"conclusion":"IsSmall 3","decl":"Fixture.isSmall_three"}
+{"binders":[],"conclusion":"triple 2 = 6","decl":"Fixture.triple_two"}
+{"binders":[],"conclusion":"Type","decl":"Fixture.Pos","fields":[{"name":"val","type":"Nat"},{"name":"pos","type":"0 < val"}]}
+{"binders":[],"conclusion":"Pos","decl":"Fixture.one","value":"{ val := 1, pos := one_pos' }"}
+{"binders":[],"conclusion":"Inhabited Pos","decl":"Fixture.instInhabitedPos","value":"{ default := one }"}
+{"binders":[{"explicit":true,"name":"n","role":"variable","type":"Nat"},{"explicit":true,"name":"h","role":"hypothesis","type":"0 < n"}],"conclusion":"0 < triple n","decl":"Fixture.triple_pos"}
+{"binders":[],"conclusion":"Lean.ParserDescr","decl":"Fixture.«term𝟚_»","value":"Lean.ParserDescr.node `Fixture.«term𝟚_» 1022\n  (Lean.ParserDescr.binary `andthen (Lean.ParserDescr.symbol \"𝟚\") (Lean.ParserDescr.cat `term 1024))"}
+{"binders":[],"conclusion":"𝟚2 = 4","decl":"Fixture.double_two"}
+{"binders":[{"explicit":true,"name":"n","role":"variable","type":"Nat"},{"explicit":true,"name":"m","role":"variable","type":"Nat"}],"conclusion":"Prop","decl":"Fixture.IsDouble","value":"m = n + n"}
+{"binders":[{"explicit":false,"name":"n","role":"variable","type":"Nat"},{"explicit":false,"name":"a","role":"variable","type":"Nat"},{"explicit":false,"name":"b","role":"variable","type":"Nat"},{"explicit":true,"name":"ha","role":"hypothesis","type":"IsDouble n a"},{"explicit":true,"name":"hb","role":"hypothesis","type":"IsDouble n b"}],"conclusion":"a = b","decl":"Fixture.IsDouble.unique"}
+{"binders":[{"explicit":true,"name":"n","role":"variable","type":"Nat"}],"conclusion":"𝟚n + n = triple n","decl":"Fixture.double_triple"}
+{"binders":[{"explicit":true,"name":"n","role":"variable","type":"Nat"}],"conclusion":"IsDouble n (𝟚n)","decl":"Fixture.isDouble_double"}

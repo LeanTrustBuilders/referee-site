@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Library</title>
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+<script defer src="assets/app.js"></script>
+</head>
+<body>
+<header class="top">
+  <button class="menu" id="menu" aria-label="Contents">☰</button>
+  <a class="brand" id="brand" href="#/">Library</a>
+  <input id="search" type="search" placeholder="Search declarations" autocomplete="off" spellcheck="false" aria-label="Search declarations">
+  <div id="search-results" class="search-results" hidden></div>
+</header>
+<div class="shell">
+  <nav class="side" id="side" aria-label="Site">
+    <div class="nav-links" id="nav-links"></div>
+    <button class="theme" id="theme">Theme: auto</button>
+    <details class="toc" open><summary>Table of Contents</summary><ol id="toc"></ol></details>
+  </nav>
+  <main id="main" tabindex="-1"><p class="muted">Loading…</p></main>
+</div>
+</body>
+</html>

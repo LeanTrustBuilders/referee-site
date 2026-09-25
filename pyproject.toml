@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trust-site"
+version = "0.1.0"
+description = "A Referee-style site for a Lean library, built from an S2 dataset and S3 evidence"
+requires-python = ">=3.10"
+license = {text = "Apache-2.0"}
+dependencies = ["evidence-core @ git+https://github.com/LeanTrustBuilders/evidence-core", "pyyaml>=6"]
+
+[project.scripts]
+trust-site = "trust_site.__main__:main"
+
+[tool.setuptools]
+packages = ["trust_site"]
+
+[tool.setuptools.package-data]
+trust_site = ["static/*", "static/**/*"]
