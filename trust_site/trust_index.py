@@ -31,6 +31,10 @@ review's status against this dataset (`current` is trust's `unchanged`, `stale` 
 `stale-underneath` its `changed`, and so on). A definition that theorems specify or characterize
 (`@[specifies]`, `@[characterization]`) is characterized by them. Packages passed with `trust` are
 listed as `trustedPackages`, which the fork treats as trusted wholesale.
+
+**Hashes.** trust keys its certificates by semantic_hash's proof-relevant hash (`semantic-v1`), which
+is a dataset's `content` hash when both were computed at the same semantic_hash revision. The index
+then carries it, so that certificates about these declarations can be matched.
 """
 from __future__ import annotations
 
@@ -55,6 +59,11 @@ KIND = {"definition": "def", "theorem": "theorem", "instance": "instance", "clas
 #: The keyword a signature is shown with.
 KEYWORD = {"definition": "def ", "theorem": "theorem ", "instance": "instance ", "class": "class ",
            "structure": "structure ", "inductive": "inductive ", "axiom": "axiom ", "opaque": "opaque "}
+
+#: The semantic_hash revision trust pins. trust's certificates are keyed by its hasher `semantic-v1`,
+#: semantic_hash's proof-relevant hash at this revision: a dataset's `content` hash, when the dataset
+#: was hashed at the same revision.
+TRUST_HASH_REVISION = "0496f6d7b650cb03c9ffc61089ffd400dfd98564"
 
 #: S3 statuses, as trust-web names a protected declaration's.
 PROTECTION = {"current": "unchanged", "renamed": "unchanged", "stale": "changed",
@@ -236,12 +245,13 @@ def build_index(opt: IndexOptions) -> dict:
     (out / "code").mkdir(parents=True)
 
     axioms = ds.facet("axioms") if "axioms" in ds.facet_names() else {}
+    hashes = ds.hasher.get("name") == "semantic_hash" and ds.hasher.get("revision") == TRUST_HASH_REVISION
     lines = []
     for d in ds.decls:
         row = {"id": d.id, "name": d.name, "module": d.module, "package": d.package,
                "kind": KIND.get(d.kind, d.kind), "isProp": d.is_prop, "isData": not d.is_prop}
-        if d.meaning:
-            row["hash"] = d.meaning
+        if hashes and d.content:
+            row["hash"] = d.content
         ax = (axioms.get(d.name) or [None])[0]
         if ax:
             row["axioms"] = ax.get("axioms", [])
@@ -290,7 +300,8 @@ def build_index(opt: IndexOptions) -> dict:
         "moduleCount": sum(p.get("modules", 0) for p in packages) or len(ds.modules),
         "declCount": len(ds.decls), "stmtEdgeCount": stmt_count, "bodyEdgeCount": body_count,
         "declBytes": len(decl_text.encode("utf-8")), "hasBodyEdges": True, "hasProofEdges": False,
-        "hasCode": True, "hasHashes": False, "codeShardSize": CODE_SHARD_SIZE, "edgeFormat": "i32le",
+        "hasCode": True, "hasHashes": hashes, "hasher": "semantic-v1" if hashes else "",
+        "codeShardSize": CODE_SHARD_SIZE, "edgeFormat": "i32le",
         # What the fork reads besides trust's own fields.
         "start": start, "declUrl": opt.decl_url,
         "source": {"dataset": ds.meta.get("spec"), "producer": ds.producer(), "library": lib.get("repo", ""),

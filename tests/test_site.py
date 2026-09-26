@@ -221,6 +221,9 @@ class TrustIndexTests(unittest.TestCase):
             ids = {d["name"]: d["id"] for d in decls}
             self.assertEqual(meta["declCount"], len(decls))
             self.assertEqual(meta["source"]["upstreamClosure"]["follow"], "term")
+            # trust's certificate hash is the dataset's proof-relevant (content) hash.
+            self.assertEqual((meta["hasHashes"], meta["hasher"]), (True, "semantic-v1"))
+            self.assertEqual(decls[ids[F + "double"]]["hash"], B.by_name[F + "double"].content)
             pairs = lambda f: [tuple(p) for p in struct.iter_unpack("<ii", (out / f).read_bytes())]
             stmt, body = pairs("stmt-edges.bin"), pairs("body-edges.bin")
             self.assertEqual((len(stmt), len(body)), (meta["stmtEdgeCount"], meta["bodyEdgeCount"]))

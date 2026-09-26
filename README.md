@@ -90,6 +90,10 @@ trusted, every reviewed declaration is listed with its S3 status, and theorems t
 characterize a definition (`@[specifies]`, `@[characterization]`) characterize it. `--trust`
 packages count as trusted wholesale, so "up to trusted" stops at them.
 
+trust's certificates are keyed by semantic_hash's proof-relevant hash (its hasher `semantic-v1`),
+which is the dataset's `content` hash when both use the same semantic_hash revision; the index
+then carries it, so that a certificate issued with trust matches the declaration here.
+
 ## Provenance
 
 `trust-site ledger --ledger FILE --dataset DIR --date D --label L` records a build; `build --ledger
