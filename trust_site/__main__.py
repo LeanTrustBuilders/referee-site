@@ -23,7 +23,7 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--out", type=Path, required=True, help="where to write the site")
     b.add_argument("--source", type=Path, help="a checkout of the library at the dataset's commit")
     b.add_argument("--baseline", type=Path, help="a dataset of an earlier commit, for Changes")
-    b.add_argument("--evidence", type=Path, help="published evidence records (S3, JSON lines)")
+    b.add_argument("--evidence", type=Path, help="published evidence records (S3): a store's directory, or JSON lines")
     b.add_argument("--ledger", type=Path, help="the provenance ledger (see `trust-site ledger`)")
     b.add_argument("--claims-only", action="store_true",
                    help="only the claims, what their statements rest on, and the theorems specifying it")

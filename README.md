@@ -43,10 +43,13 @@ On alpha-rar, 6 claims give a site of 53 declarations out of 815, as Referee's d
 
 Verdicts (accepted, query, with a note) live in the reader's browser, keyed by each declaration's
 meaning hash, so a verdict on a declaration that has changed since reads "accepted, then changed".
-**Export** writes them as [S3](https://github.com/LeanTrustBuilders/specs) review records, which
-[evidence-core](https://github.com/LeanTrustBuilders/evidence-core) reads and an evidence store
-accepts; **Import** reads them back. `--evidence FILE` shows published records (from a store) on
-each declaration's page, with their status against this build, and coverage can count them.
+**Export** writes them as [S3](https://github.com/LeanTrustBuilders/specs) review records under the
+reader's GitHub account (records are never anonymous), which
+[evidence-core](https://github.com/LeanTrustBuilders/evidence-core) reads and an
+[evidence store](https://github.com/LeanTrustBuilders/evidence-store) accepts by pull request from
+that account; **Import** reads them back. `--evidence` shows published records (a store's directory,
+or a JSONL file) on each declaration's page, with their status against this build, and coverage can
+count them.
 
 ## How it differs from Referee
 

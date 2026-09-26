@@ -72,7 +72,17 @@ async function recordId(rec) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical(body)));
   return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
 }
+// Records are never anonymous (S3): an export names the reader's GitHub account, which a store then
+// checks against whoever submits it (a pull request's author).
+function githubLogin() {
+  let login = ''; try { login = localStorage.getItem('trust-site:github') || ''; } catch (e) { }
+  login = (prompt('Your GitHub account, which the records will name (a store only takes records from their author):', login) || '').trim().replace(/^@/, '');
+  if (!login) return null;
+  try { localStorage.setItem('trust-site:github', login); } catch (e) { }
+  return login;
+}
 async function exportRecords() {
+  const login = githubLogin(); if (!login) return;
   const out = [];
   for (const [name, a] of Object.entries(audit.decls)) {
     if (!a.verdict) continue;
@@ -83,7 +93,7 @@ async function exportRecords() {
       kind: d.kind === 'Instance' ? 'instance' : (d.isProp ? 'statement' : 'definition')};
     if (a.meaning !== d.hashes.meaning) continue;   // made on another version: kept locally, not exported as current
     const rec = {schema: 'ltb-evidence/0', kind: 'review', subject, verdict: a.verdict === 'accepted' ? 'accept' : 'question',
-      by: {kind: 'person', identity: {kind: 'none'}}, at: a.at, origin: {kind: 'site', ref: location.href.split('#')[0]}};
+      by: {kind: 'person', identity: {kind: 'github', id: login}}, at: a.at, origin: {kind: 'site', ref: location.href.split('#')[0]}};
     if (a.note) rec.rationale = a.note;
     rec.id = await recordId(rec); out.push(rec);
   }

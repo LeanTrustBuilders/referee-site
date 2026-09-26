@@ -471,7 +471,12 @@ def load_evidence(path: Path | None, ds: Dataset, base: Dataset | None) -> dict[
     """Published S3 review records, by declaration, with their status against this dataset."""
     if not path or not Path(path).exists():
         return {}
-    records = evrec.load(Path(path))
+    path = Path(path)
+    if path.is_dir():
+        from evidence_core.store import Store
+        records = Store.load(path).records
+    else:
+        records = evrec.load(path)
     out: dict[str, list[dict]] = defaultdict(list)
     for r in records:
         if r.get("kind") != "review":
