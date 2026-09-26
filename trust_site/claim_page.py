@@ -29,7 +29,8 @@ from evidence_core.store import Store
 from .build import Options, STATIC, build
 
 #: The store's issue forms, as evidence-store names them.
-FORMS = {"review": "evidence-review.yml", "problem": "evidence-problem.yml", "question": "evidence-question.yml"}
+FORMS = {"review": "evidence-review.yml", "problem": "evidence-problem.yml", "question": "evidence-question.yml",
+         "status": "evidence-status.yml"}
 
 
 @dataclass

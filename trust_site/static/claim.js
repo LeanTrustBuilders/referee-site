@@ -14,7 +14,7 @@ const MODES = [['F1', 'the intended object'], ['F2', 'conventions'], ['F3', 'edg
 const CATEGORY = {F1: 'a different object', F2: 'a different convention', F3: 'different edge cases', F4: 'a junk value',
   F5: 'vacuous or trivial', F6: 'an arbitrary choice', F7: 'something wrong underneath', F8: 'drift', F9: 'less general than the source',
   naming: 'a misleading name or docstring', other: 'something else'};
-const TITLE = {review: 'Review: ', problem: 'Problem: ', question: 'Question: '};
+const TITLE = {review: 'Review: ', problem: 'Problem: ', question: 'Question: ', status: 'Status: '};
 const STATE = {open: 'open', fixed: 'fixed', intended: 'intended as it is', invalid: 'not a problem', answered: 'answered',
   withdrawn: 'withdrawn', reopened: 'reopened'};
 
@@ -50,14 +50,23 @@ function declState(n) {
   const rs = reviewsOf(n);
   if (openProblems(n).length) return rs.some(r => r.verdict === 'accept' && inForce(r) && r.applies) ? 'disputed' : 'problem';
   if (rs.some(counts)) return 'covered';
-  if (rs.some(r => r.verdict === 'accept' && inForce(r))) return 'stale';
+  const accepts = rs.filter(r => r.verdict === 'accept' && inForce(r));
+  if (accepts.some(r => r.applies)) return 'uncounted';   // reviewed, but the policy counts none of them
+  if (accepts.length) return 'stale';
   return 'unreviewed';
 }
+// Why a declaration's current acceptances do not count, in the reader's words.
+function whyUncounted(n) {
+  const live = reviewsOf(n).filter(r => r.verdict === 'accept' && inForce(r) && r.applies);
+  if (live.every(r => r.by.kind === 'agent') && !policy.agents) return 'reviewed only by AI agents, which your policy does not count';
+  if (live.every(r => r.by.involvement === 'author') && !policy.authors) return "reviewed only by its authors, which your policy does not count";
+  return 'reviewed, but your policy counts none of its reviews';
+}
 const STATE_CHIP = {covered: ['good', 'reviewed'], problem: ['bad', 'open problem'], disputed: ['bad', 'disputed'],
-  stale: ['warn', 'reviews out of date'], unreviewed: ['plain', 'not yet reviewed']};
+  uncounted: ['plain', 'not counted under your policy'], stale: ['warn', 'reviews out of date'], unreviewed: ['plain', 'not yet reviewed']};
 function members() { return policy.upstream ? [...E.order, ...E.upstream] : E.order; }
 function coverage() {
-  const ms = members(), by = {covered: [], problem: [], disputed: [], stale: [], unreviewed: []};
+  const ms = members(), by = {covered: [], problem: [], disputed: [], uncounted: [], stale: [], unreviewed: []};
   ms.forEach(n => by[declState(n)].push(n));
   return {members: ms, ...by, done: by.covered.length === ms.length};
 }
@@ -75,8 +84,22 @@ function who(by) {
     : gh(by.login);
   return person + (by.involvement === 'author' ? ' <span class="chip plain" title="The author of this declaration">author</span>' : '');
 }
-function formUrl(kind, n) {
-  return `https://github.com/${E.repo}/issues/new?template=${encodeURIComponent(E.forms[kind])}&title=${encodeURIComponent(TITLE[kind] + n)}&decl=${encodeURIComponent(n)}&commit=${encodeURIComponent(E.commit)}`;
+function formUrl(kind, n, fields = {decl: n, commit: E.commit}, title = TITLE[kind] + n) {
+  const q = Object.entries(fields).map(([k, v]) => `&${k}=${encodeURIComponent(v)}`).join('');
+  return `https://github.com/${E.repo}/issues/new?template=${encodeURIComponent(E.forms[kind])}&title=${encodeURIComponent(title)}${q}`;
+}
+// Changing a record's state: a prefilled "status" form, which intake records if the account that
+// submits it may make that change (its author; for problems and questions, a maintainer too).
+const ACTION = {withdraw: ['Withdraw', 'Take it back: only its author can'], fixed: ['Mark fixed', 'The code was changed: its reporter or a maintainer'],
+  intended: ['Intended', 'The behaviour is deliberate: its reporter or a maintainer'], invalid: ['Not a problem', 'Its reporter or a maintainer'],
+  answered: ['Mark answered', 'Its asker or a maintainer'], reopen: ['Reopen', 'Its author or a maintainer']};
+function statusActions(r) {
+  if (!E.forms || !E.forms.status || r.supersededBy || r.state === 'withdrawn') return '';
+  const acts = r.verdict === 'accept' ? ['withdraw']
+    : r.state === 'open' ? (r.verdict === 'problem' ? ['fixed', 'intended', 'invalid', 'withdraw'] : ['answered', 'withdraw'])
+    : ['reopen'];
+  return acts.map(a => `<a class="act" target="_blank" rel="noopener" title="${esc(ACTION[a][1])}" href="${formUrl('status', r.decl,
+    {record: r.id, action: a}, `Status: ${a} ${r.verdict === 'accept' ? 'review' : r.verdict} ${r.id} of ${r.decl}`)}">${ACTION[a][0]}</a>`).join('');
 }
 function actions(n) {
   if (!E.forms || !E.forms.review) return '';
@@ -118,7 +141,8 @@ function thread(r) {
     ...(r.statuses || []).map(s => ({at: s.at, html: `<div class="event">${who(s.by)} marked it <b>${esc(STATE[s.state] || s.state)}</b>${s.commit ? ` in <code>${esc(s.commit.slice(0, 12))}</code>` : ''} · ${when(s.at)}${s.note ? ` — ${md(s.note, true)}` : ''}</div>`}))]
     .sort((a, b) => a.at < b.at ? -1 : 1);
   if (events.length) h += `<div class="t-events">${events.map(e => e.html).join('')}</div>`;
-  if (r.url) h += `<div class="t-foot"><a href="${esc(r.url)}" target="_blank" rel="noopener">${r.verdict === 'accept' ? 'Discuss' : 'Reply'} on GitHub</a></div>`;
+  const acts = statusActions(r);
+  if (r.url || acts) h += `<div class="t-foot">${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">${r.verdict === 'accept' ? 'Discuss' : 'Reply'} on GitHub</a>` : ''}${acts}</div>`;
   return h + '</div>';
 }
 
@@ -164,14 +188,32 @@ function declSection(n) {
     ${actions(n)}</article>`;
 }
 
+/* ---------- the picture of what it rests on ---------- */
+const MARK = {covered: {glyph: '✓', color: 'var(--good)'}, uncounted: {glyph: '✓', color: 'var(--faint)'}, problem: {glyph: '!', color: 'var(--bad)'},
+  disputed: {glyph: '!', color: 'var(--bad)'}, stale: {glyph: '~', color: 'var(--warn)'}};
+function restsGraph() {
+  const host = $('#rests-graph'); if (!host) return;
+  const rows = E.order.map(n => [n, byName.get(n)]).filter(([, r]) => r);
+  const ids = new Set(rows.map(([, r]) => r[R.ID]));
+  const nodes = rows.map(([n, r]) => ({id: r[R.ID], name: n, label: short(n), title: n, kind: r[R.KIND], href: '#' + slug(n), root: n === E.claim}));
+  const edges = [];
+  for (const i of ids) for (const t of G[i] || []) if (ids.has(t)) edges.push([i, t]);
+  graph(host, {nodes, edges, unit: 'declaration',
+    mark: n => MARK[declState(n.name)] || null,
+    marks: [['Marks', 'Under your policy: green ✓ reviewed; grey ✓ reviewed, but not by anyone your policy counts; red ! an open problem; amber ~ reviewed only in an earlier version; none, not yet reviewed.']],
+    hint: 'Click a node to go to its reviews. Scroll to zoom, drag to pan.',
+    onSelect: n => { const el = document.getElementById(slug(n.name)); if (el) el.scrollIntoView({behavior: 'smooth', block: 'start'}); }});
+}
+
 /* ---------- the page ---------- */
 function summary() {
   const c = coverage(), total = c.members.length, pct = total ? Math.round(100 * c.covered.length / total) : 100;
-  const bar = ['covered', 'stale', 'unreviewed', 'problem', 'disputed'].map(k => c[k].length ? `<span class="mseg ${k}" style="flex:${c[k].length}" title="${c[k].length} ${STATE_CHIP[k][1]}"></span>` : '').join('');
+  const bar = ['covered', 'uncounted', 'stale', 'unreviewed', 'problem', 'disputed'].map(k => c[k].length ? `<span class="mseg ${k}" style="flex:${c[k].length}" title="${c[k].length} ${STATE_CHIP[k][1]}"></span>` : '').join('');
   const lead = c.done
     ? `<b>Covered</b> under your policy: every one of the ${plural(total, 'declaration')} its statement rests on has a review that counts, and none has an open problem.`
     : `<b>${c.covered.length} of ${total}</b> declarations its statement rests on have a review that counts under your policy.`;
-  const missing = [['problem', 'with an open problem'], ['disputed', 'disputed'], ['stale', 'reviewed only in an earlier version'], ['unreviewed', 'not yet reviewed']]
+  const missing = [['problem', 'with an open problem'], ['disputed', 'disputed'], ['uncounted', 'reviewed, but not counted under your policy'],
+    ['stale', 'reviewed only in an earlier version'], ['unreviewed', 'not yet reviewed']]
     .filter(([k]) => c[k].length).map(([k, t]) => `${c[k].length} ${t}: ${c[k].map(nameLink).join(', ')}`);
   return `<div class="cp-summary"><div class="meter" aria-label="${pct}% reviewed">${bar}</div><p>${lead}</p>${missing.length ? `<ul class="missing">${missing.map(m => `<li>${m}</li>`).join('')}</ul>` : ''}</div>`;
 }
@@ -185,6 +227,7 @@ function reviewNext() {
   const c = coverage();
   const rank = [...c.problem.map(n => [n, 'decide the open problem']), ...c.disputed.map(n => [n, 'reviewers disagree']),
     ...c.unreviewed.map(n => [n, 'nobody has reviewed it']), ...c.stale.map(n => [n, 'review it again: it changed']),
+    ...c.uncounted.map(n => [n, whyUncounted(n)]),
     ...E.order.filter(n => openQuestions(n).length).map(n => [n, 'answer the open question'])];
   const gaps = E.order.filter(n => c.covered.includes(n)).map(n => {
     const live = reviewsOf(n).filter(r => r.verdict === 'accept' && inForce(r) && r.applies);
@@ -237,7 +280,7 @@ function reviewers() {
 function howTo() {
   if (!E.forms || !E.forms.review) return '';
   return `<section class="cp-howto" id="take-part"><h2>Take part</h2>
-    <p><b>People</b> use the buttons under each declaration: each opens a GitHub issue form in <a href="https://github.com/${esc(E.repo)}">${esc(E.repo)}</a>, and a bot records it in the repository's evidence store under your GitHub account. Reviews are never anonymous. Comments on the issue are recorded as replies; on a problem, the reporter or a maintainer comments <code>/fixed &lt;commit&gt;</code>, <code>/intended</code> or <code>/invalid</code>; on a question, <code>/answered</code>; anyone can <code>/withdraw</code> their own review.</p>
+    <p><b>People</b> use the buttons under each declaration: each opens a GitHub issue form in <a href="https://github.com/${esc(E.repo)}">${esc(E.repo)}</a>, and a bot records it in the repository's evidence store under your GitHub account. Reviews are never anonymous. Comments on the issue are recorded as replies. Under each review, <b>Withdraw</b>, <b>Mark fixed</b>, <b>Mark answered</b>, <b>Reopen</b> and the like open a form that changes its state, which the bot records only if your account may: its author, and for problems and questions a maintainer. The same changes can be made by commenting on the review's issue: <code>/withdraw</code>, <code>/fixed &lt;commit&gt;</code>, <code>/intended</code>, <code>/invalid</code>, <code>/answered</code>, <code>/reopen</code>.</p>
     <p><b>AI agents</b> say so: in the form, "Written by: an AI agent", with its tool and model; in a comment, a line <code>&lt;!-- agent: tool=…; model=… --&gt;</code>. From a terminal:</p>
     <pre>${esc(E.agentCommand)}</pre>
     <p class="muted small">An agent's review needs a rationale, and by default does not count toward coverage: tick "count reviews by AI agents" above to count it. This page shows the store at commit <code>${esc(E.commit.slice(0, 12))}</code> of the library; it is rebuilt when the store changes.</p></section>`;
@@ -256,9 +299,10 @@ function render() {
     <section class="cp-claim"><h2>The claim</h2>${declSection(claim)}</section>
     <section class="cp-rests" id="rests"><h2>What it rests on</h2>
       <p class="muted">The declarations of the library its statement rests on, each after what it rests on in turn. Proofs are not reviewed here: the kernel checked them.</p>
+      <div class="graph" id="rests-graph"></div>
       ${rest.map(declSection).join('')}</section>
     ${upstreamSection()}${activity()}${reviewers()}${howTo()}`;
-  const main = $('#main'); main.innerHTML = html; typeset(main); applyExpanded();
+  const main = $('#main'); main.innerHTML = html; typeset(main); applyExpanded(); restsGraph();
   main.querySelectorAll('[data-p]').forEach(i => i.onchange = () => { policy[i.dataset.p] = i.checked; savePolicy(); const y = window.scrollY; render(); window.scrollTo(0, y); });
   main.querySelectorAll('#act-filter [data-f]').forEach(b => b.onclick = () => {
     main.querySelectorAll('#act-filter [data-f]').forEach(x => x.classList.toggle('on', x === b));
@@ -266,7 +310,7 @@ function render() {
   });
 }
 async function start() {
-  [S, D, E] = await Promise.all([getJSON('data/site.json'), getJSON('data/decls.json'), getJSON('data/evidence.json')]);
+  [S, D, G, E] = await Promise.all([getJSON('data/site.json'), getJSON('data/decls.json'), getJSON('data/graph.json'), getJSON('data/evidence.json')]);
   D.forEach(r => byName.set(r[R.NAME], r));
   E.records.forEach(r => recs.set(r.id, r));
   await Promise.all(E.order.map(async n => { const e = await declData(n); if (e) entries.set(n, e); }));
