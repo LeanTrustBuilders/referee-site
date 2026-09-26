@@ -1,5 +1,6 @@
 """trust-site build --dataset DIR --out DIR [--source DIR] [options]
 trust-site trust-index --dataset DIR --out DIR [options]
+trust-site claim --dataset DIR --store evidence/ --out DIR [options]
 
 Builds the site of a Lean library from its dataset (S2, written by trust-extract), published
 evidence (S3), and a checkout of its source (for code, proofs, README and claims files).
@@ -36,6 +37,17 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--title", help="the site's title (default: the library's root module)")
     b.add_argument("--repo", help="owner/name of the library's repository (default: from the dataset)")
     b.add_argument("--issues-repo", help="owner/name where 'Open an issue' goes (default: --repo)")
+    cp = sub.add_parser("claim", help="one claim's page, with every review of what it rests on")
+    cp.add_argument("--dataset", type=Path, required=True, help="the dataset (S2) of the library")
+    cp.add_argument("--out", type=Path, required=True, help="where to write the page")
+    cp.add_argument("--store", type=Path, help="the evidence store (a directory with store.json)")
+    cp.add_argument("--evidence", type=Path, help="or: evidence records (S3, JSON lines)")
+    cp.add_argument("--claim", help="the claim (default: the store's first, else the first @[claim])")
+    cp.add_argument("--source", type=Path, help="a checkout of the library at the dataset's commit")
+    cp.add_argument("--at", type=Path, action="append", default=[], metavar="DATASET",
+                    help="a dataset of an earlier commit, to say what changed under a stale review (repeatable)")
+    cp.add_argument("--repo", help="owner/name where the issue forms are (default: the store's library)")
+    cp.add_argument("--title", help="the page's title")
     ti = sub.add_parser("trust-index", help="write the index trust-web reads")
     ti.add_argument("--dataset", type=Path, required=True, help="the dataset (S2) of the library")
     ti.add_argument("--out", type=Path, required=True, help="the directory indexes are written under")
@@ -54,6 +66,12 @@ def main(argv: list[str] | None = None) -> int:
     lg.add_argument("--date", default="", help="the build's date (e.g. the commit date)")
     lg.add_argument("--label", default="", help="a name for the build (e.g. `git describe`)")
     args = parser.parse_args(argv)
+    if args.cmd == "claim":
+        from .claim_page import ClaimOptions, build_claim
+        r = build_claim(ClaimOptions(dataset=args.dataset, out=args.out, store=args.store, evidence=args.evidence,
+                                     claim=args.claim, source=args.source, at=args.at, repo=args.repo, title=args.title))
+        print(f"claim: {r['claim']}, {r['declarations']} declarations, {r['records']} records → {args.out}")
+        return 0
     if args.cmd == "trust-index":
         from .trust_index import IndexOptions, build_index
         r = build_index(IndexOptions(dataset=args.dataset, out=args.out, name=args.name, evidence=args.evidence,

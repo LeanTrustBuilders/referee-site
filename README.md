@@ -67,6 +67,28 @@ What Referee has that this does not (yet): standalone per-declaration files and 
 check (ChallengeGen), the JunkValues linter, the "via its property" view of a characterized
 definition's graph, and git-blame provenance per declaration (this uses the file's last commit).
 
+## One claim, and everyone's reviews of it
+
+`trust-site claim` builds a single page for one claim, with the social side of reviewing: every review,
+problem, question and reply about the declarations its statement rests on, from the library's
+[evidence store](https://github.com/LeanTrustBuilders/evidence-store).
+
+```bash
+trust-site claim --dataset DATASET --store evidence/ --source CHECKOUT --out page/ [--at OLDER_DATASET …]
+```
+
+The page shows the claim and what it rests on, in reading order, each with its statement taken apart
+and hovers, what Lean checks about it (specifications, examples), and then its reviews as threads:
+who (a GitHub account, or an AI agent and the account it acted through), what they compared it with,
+which failure modes they checked, caveats, the replies, and what happened since (withdrawn,
+superseded by the same reviewer, a problem fixed in a commit, a question answered). A review of an
+earlier version says so, and with `--at` datasets of earlier commits, what changed underneath it.
+Coverage is computed in the page under the reader's policy (count AI agents? reviews made before a
+change underneath? acceptances with caveats? authors' own?), with what is left to review next, the
+failure modes nobody checked, disagreements, the activity and the reviewers. Every "Review", "Report
+a problem" and "Ask a question" opens the store's issue form, prefilled. The whole site, scoped to the
+claim, is kept beside it as `site.html`.
+
 ## trust's front end, on the same data
 
 `trust-site trust-index` writes the index that [trust-web](https://github.com/LeanTrustBuilders/trust-web)

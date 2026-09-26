@@ -258,5 +258,50 @@ class TrustIndexTests(unittest.TestCase):
             self.assertEqual((r["trusted"], r["reviewed"]), (1, 2))
 
 
+class ClaimPageTests(unittest.TestCase):
+    """One claim's page: the scoped site, and the evidence about what the claim rests on."""
+
+    def test_page_data(self):
+        from evidence_core import records as evrec
+        from evidence_core.store import Store, default_config
+        from trust_site.claim_page import ClaimOptions, build_claim
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            store = Store.init(tmp / "evidence", {**default_config("owner/lib", "Fixture"), "claims": [F + "triple_pos"]})
+            person = {"kind": "person", "identity": {"kind": "github", "id": "alice"}}
+            agent = {"kind": "agent", "identity": {"kind": "github", "id": "alice"},
+                     "agent": {"tool": "Claude Code", "model": "claude-opus-5-5"}}
+            def review(name, verdict="accept", by=person, ds=A, **extra):
+                return {"schema": "ltb-evidence/0", "kind": "review", "subject": evrec.subject_from_decl(ds.by_name[F + name], ds),
+                        "verdict": verdict, "by": by, "at": "2026-09-26T10:00:00Z",
+                        "origin": {"kind": "issue", "ref": "owner/lib#1"}, **extra}
+            [acc, prob, old] = store.add([review("triple", rationale="ok", by=agent),
+                                          review("triple", "problem", problem={"category": "F3"}, rationale="at 0"),
+                                          review("triple_pos")])
+            store.add([{"schema": "ltb-evidence/0", "kind": "comment", "text": "agreed", "links": {"replies_to": prob["id"]},
+                        "by": person, "at": "2026-09-26T11:00:00Z", "subject": prob["subject"]},
+                       {"schema": "ltb-evidence/0", "kind": "status", "target": prob["id"], "state": "fixed",
+                        "commit": "B", "by": person, "at": "2026-09-26T12:00:00Z"}])
+            r = build_claim(ClaimOptions(dataset=V / "fixture-b", out=tmp / "page", store=tmp / "evidence",
+                                         source=V / "source-b", at=[V / "fixture-a"]))
+            out = tmp / "page"
+            self.assertTrue((out / "index.html").read_text().count("claim.js") == 1)
+            self.assertTrue((out / "site.html").exists() and (out / "assets" / "core.js").exists())
+            e = json.loads((out / "data" / "evidence.json").read_text())
+            self.assertEqual(e["claim"], F + "triple_pos")
+            self.assertEqual(e["order"][-1], F + "triple_pos")          # what it rests on comes first
+            self.assertIn(F + "triple", e["order"])
+            self.assertEqual(e["forms"]["review"], "evidence-review.yml")
+            rows = {x["id"]: x for x in e["records"]}
+            self.assertEqual(rows[prob["id"]]["state"], "fixed")
+            self.assertEqual(rows[prob["id"]]["statuses"][0]["commit"], "B")
+            self.assertEqual(len(rows[prob["id"]]["replies"]), 1)
+            self.assertEqual(rows[acc["id"]]["by"]["label"], "Claude Code (claude-opus-5-5) via alice")
+            self.assertEqual(rows[acc["id"]]["url"], "https://github.com/owner/lib/issues/1")
+            # Made at A: `triple` is unchanged in B, and `triple_pos` too.
+            self.assertEqual((rows[acc["id"]]["status"], rows[old["id"]]["status"]), ("current", "current"))
+            self.assertEqual(r["records"], 4)
+
+
 if __name__ == "__main__":
     unittest.main()
