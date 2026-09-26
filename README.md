@@ -7,7 +7,7 @@ the project claims, what changed — built from the data the rest of the
 how it is built.
 
 ```bash
-pip install git+https://github.com/LeanTrustBuilders/site
+pip install git+https://github.com/LeanTrustBuilders/referee-site
 trust-site build --dataset DATASET --source CHECKOUT --out site/ --trust mathlib
 ```
 
