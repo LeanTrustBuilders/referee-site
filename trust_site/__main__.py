@@ -1,4 +1,5 @@
 """trust-site build --dataset DIR --out DIR [--source DIR] [options]
+trust-site trust-index --dataset DIR --out DIR [options]
 
 Builds the site of a Lean library from its dataset (S2, written by trust-extract), published
 evidence (S3), and a checkout of its source (for code, proofs, README and claims files).
@@ -35,12 +36,31 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--title", help="the site's title (default: the library's root module)")
     b.add_argument("--repo", help="owner/name of the library's repository (default: from the dataset)")
     b.add_argument("--issues-repo", help="owner/name where 'Open an issue' goes (default: --repo)")
+    ti = sub.add_parser("trust-index", help="write the index trust-web reads")
+    ti.add_argument("--dataset", type=Path, required=True, help="the dataset (S2) of the library")
+    ti.add_argument("--out", type=Path, required=True, help="the directory indexes are written under")
+    ti.add_argument("--name", default="", help="the index's name, trust-web's ?repo= (default: the package)")
+    ti.add_argument("--evidence", type=Path, help="published evidence records (S3, JSON lines)")
+    ti.add_argument("--body", choices=["term", "meaning"], default="term",
+                    help="body edges: everything a definition's value mentions, as trust has it (term), "
+                         "or its data only (meaning)")
+    ti.add_argument("--trust", action="append", default=[], metavar="PKG",
+                    help="treat a package, and everything it depends on, as trusted (repeatable)")
+    ti.add_argument("--decl-url", default="", help="a page for each project declaration, {name} standing for it")
+    ti.add_argument("--start", default="", help="the declaration shown first")
     lg = sub.add_parser("ledger", help="record a build in the provenance ledger")
     lg.add_argument("--ledger", type=Path, required=True, help="the ledger file (created if missing)")
     lg.add_argument("--dataset", type=Path, required=True, help="the build's dataset (S2)")
     lg.add_argument("--date", default="", help="the build's date (e.g. the commit date)")
     lg.add_argument("--label", default="", help="a name for the build (e.g. `git describe`)")
     args = parser.parse_args(argv)
+    if args.cmd == "trust-index":
+        from .trust_index import IndexOptions, build_index
+        r = build_index(IndexOptions(dataset=args.dataset, out=args.out, name=args.name, evidence=args.evidence,
+                                     body=args.body, trust=args.trust, decl_url=args.decl_url, start=args.start))
+        print(f"trust-index: {r['decls']} declarations, {r['stmt']} statement and {r['body']} body edges, "
+              f"{r['trusted']} trusted, {r['characterized']} characterized, {r['reviewed']} reviewed → {r['out']}")
+        return 0
     if args.cmd == "ledger":
         from evidence_core import Dataset
         from . import ledger as ledger_mod

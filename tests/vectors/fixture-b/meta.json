@@ -76,13 +76,13 @@
    "name": "signature",
    "file": "facets/signature.jsonl",
    "description":
-   "every node's signature as Lean prints it (`name (x : α) … : β`), for hovers",
+   "every node's signature as Lean prints it (`name (x : α) … : β`), for hovers; with `refs`, as in the statement facet",
    "count": 44},
   {"schema": "statement/1",
    "name": "statement",
    "file": "facets/statement.jsonl",
    "description":
-   "the declaration's statement taken apart: its binders (name, pretty-printed type, role: type, variable, hypothesis or instance), the conclusion under them, and for a definition its body, for a structure its fields, for another inductive type its constructors; pretty-printed by Lean, `⋯` marking what a bounded printer cut; with each text, `refs`: the span and name of each constant it names, and with each binder the `head` constant of its type",
+   "the declaration's statement taken apart: its binders (name, pretty-printed type, role: type, variable, hypothesis or instance), the conclusion under them, and for a definition its body, for a structure its fields, for another inductive type its constructors; pretty-printed by Lean, `⋯` marking what a bounded printer cut; with each text, `refs`: the span and name of each constant it names, and with each binder the `head` constant of its type. Project nodes, and with an upstream closure the upstream nodes it reached that are not proofs",
    "count": 21}],
  "edges":
  [{"name": "statement",

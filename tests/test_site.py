@@ -3,14 +3,15 @@
 Version B of the fixture changes the body of `double`, the statement of `triple_one`, only the proof
 of `triple_two`, and renames `triple_three`. `triple_pos` carries `@[claim]`; `double_triple`
 specifies `double` and `triple`; `IsDouble` characterizes `double`. The datasets are real output of
-trust-extract 0.4 (`test/run.sh KEEP_DIR` in LeanTrustBuilders/extractor), and source-a/source-b
-the fixture's sources.
+trust-extract 0.6 (`test/run.sh KEEP_DIR` in LeanTrustBuilders/extractor), fixture-b-closure the
+same commit extracted with `--upstream-closure term`, and source-a/source-b the fixture's sources.
 
 Run with ``python3 -m unittest discover -s tests``.
 """
 from __future__ import annotations
 
 import json
+import struct
 import tempfile
 import unittest
 from pathlib import Path
@@ -23,6 +24,7 @@ from trust_site import ledger as ledger_mod
 from trust_site.build import scoped, shard_of
 from trust_site.changes import compare
 from trust_site.source import split_statement
+from trust_site.trust_index import IndexOptions, build_index
 
 V = Path(__file__).parent / "vectors"
 A, B = Dataset.load(V / "fixture-a"), Dataset.load(V / "fixture-b")
@@ -194,6 +196,63 @@ class BuildTests(unittest.TestCase):
             self.assertLess(site["scope"]["size"], site["scope"]["library"])
             with self.assertRaises(SystemExit):
                 build(Options(dataset=V / "fixture-b", out=out, only=[F + "nothing"]))
+
+
+class TrustIndexTests(unittest.TestCase):
+    """The index trust-web reads, written from a dataset and evidence."""
+
+    def test_graph_code_and_marks(self):
+        from evidence_core import records as evrec
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            # Reviews made at A: `triple` is unchanged in B, `double` rewritten.
+            ev = tmp / "evidence.jsonl"
+            recs = [evrec.with_id({"spec": "ltb-evidence/0", "kind": "review", "verdict": "accepted",
+                                   "subject": evrec.subject_from_decl(A.by_name[F + n], A),
+                                   "by": {"kind": "person", "identity": {"id": "someone"}},
+                                   "at": "2026-09-01T00:00:00Z", "rationale": "read it"})
+                    for n in ("triple", "double")]
+            ev.write_text("".join(json.dumps(r) + "\n" for r in recs))
+            r = build_index(IndexOptions(dataset=V / "fixture-b-closure", out=tmp, name="fx", evidence=ev,
+                                         trust=["lean4"], decl_url="../site/#/d/{name}"))
+            out = tmp / "fx"
+            meta = json.loads((out / "meta.json").read_text())
+            decls = [json.loads(l) for l in (out / "decls.jsonl").read_text().splitlines()]
+            ids = {d["name"]: d["id"] for d in decls}
+            self.assertEqual(meta["declCount"], len(decls))
+            self.assertEqual(meta["source"]["upstreamClosure"]["follow"], "term")
+            pairs = lambda f: [tuple(p) for p in struct.iter_unpack("<ii", (out / f).read_bytes())]
+            stmt, body = pairs("stmt-edges.bin"), pairs("body-edges.bin")
+            self.assertEqual((len(stmt), len(body)), (meta["stmtEdgeCount"], meta["bodyEdgeCount"]))
+            # Statement edges leave upstream declarations too; body edges only leave data.
+            self.assertIn((ids["HAdd.hAdd"], ids["HAdd"]), stmt)
+            self.assertIn((ids[F + "one"], ids[F + "one_pos'"]), body)
+            self.assertFalse([s for s, _ in body if decls[s]["isProp"]])
+            self.assertFalse(set(body) & set(stmt))
+            # Code: a signature with its keyword, UTF-16 references, and a body for data.
+            code = {}
+            for f in (out / "code").glob("*.jsonl"):
+                for l in f.read_text().splitlines():
+                    row = json.loads(l)
+                    code[row["id"]] = row
+            dz = code[ids[F + "double_zero"]]
+            self.assertTrue(dz["signature"]["text"].startswith("theorem "))
+            self.assertIsNone(dz["value"])
+            # `double 0` prints as `𝟚0` (Fixture.Notation), and `𝟚` is two UTF-16 code units.
+            ref = next(x for x in dz["signature"]["refs"] if x["name"] == F + "double")
+            units = dz["signature"]["text"].encode("utf-16-le")
+            self.assertEqual(units[2 * ref["start"]:2 * ref["stop"]].decode("utf-16-le"), "𝟚")
+            self.assertEqual(code[ids[F + "Pos"]]["value"]["text"].splitlines()[0].strip(), "val : Nat")
+            self.assertTrue(code[ids["Nat.add"]]["value"]["text"])
+            # Marks.
+            marks = json.loads((out / "marks.json").read_text())
+            self.assertEqual([m["name"] for m in marks["trusted"]], [F + "triple"])
+            status = {m["name"]: m["status"] for m in marks["protected"]}
+            self.assertEqual(status, {F + "triple": "unchanged", F + "double": "changed"})
+            chars = {c["definition"]: set(c["theorems"]) for c in marks["characterizations"]}
+            self.assertEqual(chars[F + "double"], {F + "double_triple", F + "isDouble_double", F + "IsDouble.unique"})
+            self.assertEqual(marks["trustedPackages"], ["lean4"])
+            self.assertEqual((r["trusted"], r["reviewed"]), (1, 2))
 
 
 if __name__ == "__main__":

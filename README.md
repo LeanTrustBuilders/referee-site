@@ -67,6 +67,29 @@ What Referee has that this does not (yet): standalone per-declaration files and 
 check (ChallengeGen), the JunkValues linter, the "via its property" view of a characterized
 definition's graph, and git-blame provenance per declaration (this uses the file's last commit).
 
+## trust's front end, on the same data
+
+`trust-site trust-index` writes the index that [trust-web](https://github.com/LeanTrustBuilders/trust-web)
+(our fork of [chrisflav/trust-web](https://github.com/chrisflav/trust-web), the front end of
+[trust](https://github.com/chrisflav/trust)) reads, from the same dataset and evidence:
+
+```bash
+trust-site trust-index --dataset DATASET --out trust-web/public/index --name mylib \
+  --evidence evidence.jsonl --trust mathlib --decl-url "../site/#/d/{name}"
+```
+
+trust-web shows a declaration's definitional dependencies as a tree and a graph: its statement,
+and for what is not a proof its body too, walked into the libraries underneath. For that walk to
+leave the project, extract with `trust-extract --upstream-closure term`: every upstream
+declaration it reaches becomes a node with edges of its own (on LeanMachineLearning, 10,288 of
+them, in 19 seconds). `--body term` (the default) gives trust's body edges, everything a
+definition's value mentions; `--body meaning` gives only its data, the proofs inside skipped.
+
+Reviews become trust's marks: an accepted review that still applies marks its declaration
+trusted, every reviewed declaration is listed with its S3 status, and theorems that specify or
+characterize a definition (`@[specifies]`, `@[characterization]`) characterize it. `--trust`
+packages count as trusted wholesale, so "up to trusted" stops at them.
+
 ## Provenance
 
 `trust-site ledger --ledger FILE --dataset DIR --date D --label L` records a build; `build --ledger
