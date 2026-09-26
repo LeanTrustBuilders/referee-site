@@ -1,12 +1,12 @@
 {
  "upstreamClosure": {
   "follow": "term",
-  "display": "authored"
+  "display": "declared"
  },
  "toolchain": "leanprover/lean4:v4.35.0-rc2",
- "spec": "ltb-dataset/0",
+ "spec": "ltb-dataset/1",
  "producer": {
-  "version": "0.5.0",
+  "version": "0.7.0",
   "name": "trust-extract"
  },
  "packages": [
@@ -49,11 +49,20 @@
   "githash": "11acb17ec6b07a8f9e9173e6845197929540936b"
  },
  "hasher": {
-  "revision": "0496f6d7b650cb03c9ffc61089ffd400dfd98564",
-  "name": "semantic_hash",
-  "meaning": "proof-irrelevant",
-  "local": "ltb-local-v1",
-  "content": "proof-relevant"
+  "name": "ltb-meaning/1",
+  "meaning": "ltb-meaning/1",
+  "local": "ltb-local/2",
+  "legacy": {
+   "revision": "0496f6d7b650cb03c9ffc61089ffd400dfd98564",
+   "name": "semantic_hash",
+   "meaning": "proof-irrelevant",
+   "local": "ltb-local-v1"
+  },
+  "content": {
+   "variant": "proof-relevant",
+   "revision": "0496f6d7b650cb03c9ffc61089ffd400dfd98564",
+   "name": "semantic_hash"
+  }
  },
  "facets": [
   {
@@ -61,7 +70,7 @@
    "name": "docstring",
    "file": "facets/docstring.jsonl",
    "description": "the declaration's docstring, verbatim (project nodes, and upstream nodes unless the extractor ran with --no-upstream-docs)",
-   "count": 876
+   "count": 868
   },
   {
    "schema": "source/1",
@@ -117,14 +126,14 @@
    "name": "signature",
    "file": "facets/signature.jsonl",
    "description": "every node's signature as Lean prints it (`name (x : \u03b1) \u2026 : \u03b2`), for hovers; with `refs`, as in the statement facet",
-   "count": 1592
+   "count": 1588
   },
   {
    "schema": "statement/1",
    "name": "statement",
    "file": "facets/statement.jsonl",
    "description": "the declaration's statement taken apart: its binders (name, pretty-printed type, role: type, variable, hypothesis or instance), the conclusion under them, and for a definition its body, for a structure its fields, for another inductive type its constructors; pretty-printed by Lean, `\u22ef` marking what a bounded printer cut; with each text, `refs`: the span and name of each constant it names, and with each binder the `head` constant of its type. Project nodes, and with an upstream closure the upstream nodes it reached that are not proofs",
-   "count": 1306
+   "count": 1331
   }
  ],
  "edges": [
@@ -132,48 +141,55 @@
    "name": "statement",
    "format": "i32le-pairs",
    "file": "edges/statement.bin",
-   "description": "the constants the declaration's type mentions",
-   "count": 80
+   "description": "the declarations the declaration's type mentions, proofs erased, looking through helpers (rule ltb-meaning/1)",
+   "count": 78
   },
   {
    "name": "meaning",
    "format": "i32le-pairs",
    "file": "edges/meaning.bin",
-   "description": "what the declaration means: its statement for a proof; its statement and the data of its value, proofs skipped, for a definition",
-   "count": 114
+   "description": "what the declaration means, under the rule ltb-meaning/1: the declarations its content mentions, proofs erased everywhere, looking through helpers. A proof's content is its statement; a definition's, its statement and value; an inductive type's, its type and constructors. The closure over these edges is what coverage is computed over, and what the meaning hash covers",
+   "count": 111
   },
   {
    "name": "term",
    "format": "i32le-pairs",
    "file": "edges/term.bin",
    "description": "the type and the whole value, proofs included, restricted to targets that are nodes",
-   "count": 406
+   "count": 472
+  },
+  {
+   "name": "source",
+   "format": "i32le-pairs",
+   "file": "edges/source.bin",
+   "description": "what the declaration's source needs that its elaborated term does not mention: the coercion instances it relies on, and for a notation what it expands to",
+   "count": 2
   },
   {
    "name": "upstream-statement",
    "format": "i32le-pairs",
    "file": "edges/upstream-statement.bin",
-   "description": "the constants the declaration's type mentions, from the upstream nodes the closure along `term` reached",
-   "count": 5680
+   "description": "the declarations the declaration's type mentions, proofs erased, looking through helpers (rule ltb-meaning/1), from the upstream nodes the closure along `term` reached",
+   "count": 4727
   },
   {
    "name": "upstream-meaning",
    "format": "i32le-pairs",
    "file": "edges/upstream-meaning.bin",
-   "description": "what the declaration means: its statement for a proof; its statement and the data of its value, proofs skipped, for a definition, from the upstream nodes the closure along `term` reached",
-   "count": 14559
+   "description": "what the declaration means, under the rule ltb-meaning/1: the declarations its content mentions, proofs erased everywhere, looking through helpers. A proof's content is its statement; a definition's, its statement and value; an inductive type's, its type and constructors. The closure over these edges is what coverage is computed over, and what the meaning hash covers, from the upstream nodes the closure along `term` reached",
+   "count": 11577
   },
   {
    "name": "upstream-term",
    "format": "i32le-pairs",
    "file": "edges/upstream-term.bin",
    "description": "the type and the whole value, proofs included, restricted to targets that are nodes, from the upstream nodes the closure along `term` reached that are not proofs",
-   "count": 13862
+   "count": 14035
   }
  ],
  "counts": {
-  "upstream": 1571,
+  "upstream": 1567,
   "project": 21,
-  "nodes": 1592
+  "nodes": 1588
  }
 }

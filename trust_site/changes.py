@@ -86,6 +86,6 @@ def compare(new: Dataset, old: Dataset, scope_names: set[str] | None = None) -> 
         "current": {"commit": new.commit, "decls": sum(1 for d in new.decls if d.is_project)},
         "counts": {k: len(v) for k, v in lists.items()},
         "lists": {k: sorted(v) for k, v in lists.items()},
-        "comparable": old.hasher.get("revision") == new.hasher.get("revision"),
+        "comparable": all(old.hasher.get(k) == new.hasher.get(k) for k in ("name", "revision", "local")),
     }
     return ch

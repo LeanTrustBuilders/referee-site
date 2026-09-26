@@ -245,7 +245,8 @@ def build_index(opt: IndexOptions) -> dict:
     (out / "code").mkdir(parents=True)
 
     axioms = ds.facet("axioms") if "axioms" in ds.facet_names() else {}
-    hashes = ds.hasher.get("name") == "semantic_hash" and ds.hasher.get("revision") == TRUST_HASH_REVISION
+    content = ds.content_hasher
+    hashes = content.get("name") == "semantic_hash" and content.get("revision") == TRUST_HASH_REVISION
     lines = []
     for d in ds.decls:
         row = {"id": d.id, "name": d.name, "module": d.module, "package": d.package,

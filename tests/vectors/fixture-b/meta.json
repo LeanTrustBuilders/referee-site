@@ -1,6 +1,6 @@
 {"toolchain": "leanprover/lean4:v4.35.0-rc2",
- "spec": "ltb-dataset/0",
- "producer": {"version": "0.5.0", "parts": 1, "name": "trust-extract"},
+ "spec": "ltb-dataset/1",
+ "producer": {"version": "0.7.0", "parts": 1, "name": "trust-extract"},
  "packages":
  [{"requires": ["TrustAnnotations", "lean4"], "name": "Fixture", "modules": 4},
   {"requires": ["lean4"], "name": "TrustAnnotations", "modules": 4},
@@ -18,18 +18,25 @@
  {"version": "4.35.0-rc2",
   "githash": "11acb17ec6b07a8f9e9173e6845197929540936b"},
  "hasher":
- {"revision": "0496f6d7b650cb03c9ffc61089ffd400dfd98564",
-  "name": "semantic_hash",
-  "meaning": "proof-irrelevant",
-  "local": "ltb-local-v1",
-  "content": "proof-relevant"},
+ {"name": "ltb-meaning/1",
+  "meaning": "ltb-meaning/1",
+  "local": "ltb-local/2",
+  "legacy":
+  {"revision": "0496f6d7b650cb03c9ffc61089ffd400dfd98564",
+   "name": "semantic_hash",
+   "meaning": "proof-irrelevant",
+   "local": "ltb-local-v1"},
+  "content":
+  {"variant": "proof-relevant",
+   "revision": "0496f6d7b650cb03c9ffc61089ffd400dfd98564",
+   "name": "semantic_hash"}},
  "facets":
  [{"schema": "docstring/1",
    "name": "docstring",
    "file": "facets/docstring.jsonl",
    "description":
    "the declaration's docstring, verbatim (project nodes, and upstream nodes unless the extractor ran with --no-upstream-docs)",
-   "count": 30},
+   "count": 27},
   {"schema": "source/1",
    "name": "source",
    "file": "facets/source.jsonl",
@@ -77,7 +84,7 @@
    "file": "facets/signature.jsonl",
    "description":
    "every node's signature as Lean prints it (`name (x : α) … : β`), for hovers; with `refs`, as in the statement facet",
-   "count": 44},
+   "count": 39},
   {"schema": "statement/1",
    "name": "statement",
    "file": "facets/statement.jsonl",
@@ -88,18 +95,25 @@
  [{"name": "statement",
    "format": "i32le-pairs",
    "file": "edges/statement.bin",
-   "description": "the constants the declaration's type mentions",
-   "count": 80},
+   "description":
+   "the declarations the declaration's type mentions, proofs erased, looking through helpers (rule ltb-meaning/1)",
+   "count": 78},
   {"name": "meaning",
    "format": "i32le-pairs",
    "file": "edges/meaning.bin",
    "description":
-   "what the declaration means: its statement for a proof; its statement and the data of its value, proofs skipped, for a definition",
-   "count": 114},
+   "what the declaration means, under the rule ltb-meaning/1: the declarations its content mentions, proofs erased everywhere, looking through helpers. A proof's content is its statement; a definition's, its statement and value; an inductive type's, its type and constructors. The closure over these edges is what coverage is computed over, and what the meaning hash covers",
+   "count": 111},
   {"name": "term",
    "format": "i32le-pairs",
    "file": "edges/term.bin",
    "description":
    "the type and the whole value, proofs included, restricted to targets that are nodes",
-   "count": 160}],
- "counts": {"upstream": 23, "project": 21, "nodes": 44}}
+   "count": 166},
+  {"name": "source",
+   "format": "i32le-pairs",
+   "file": "edges/source.bin",
+   "description":
+   "what the declaration's source needs that its elaborated term does not mention: the coercion instances it relies on, and for a notation what it expands to",
+   "count": 1}],
+ "counts": {"upstream": 18, "project": 21, "nodes": 39}}

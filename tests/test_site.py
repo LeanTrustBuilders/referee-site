@@ -228,7 +228,9 @@ class TrustIndexTests(unittest.TestCase):
             stmt, body = pairs("stmt-edges.bin"), pairs("body-edges.bin")
             self.assertEqual((len(stmt), len(body)), (meta["stmtEdgeCount"], meta["bodyEdgeCount"]))
             # Statement edges leave upstream declarations too; body edges only leave data.
-            self.assertIn((ids["HAdd.hAdd"], ids["HAdd"]), stmt)
+            self.assertIn((ids["instHAdd"], ids["HAdd"]), stmt)
+            # A projection is not a declaration: it is looked through, to its structure.
+            self.assertNotIn("HAdd.hAdd", ids)
             self.assertIn((ids[F + "one"], ids[F + "one_pos'"]), body)
             self.assertFalse([s for s, _ in body if decls[s]["isProp"]])
             self.assertFalse(set(body) & set(stmt))

@@ -20,25 +20,20 @@
 {"decl":"Fixture.double_triple","refs":[[27,30,"Nat"],[34,35,"Fixture.double"],[37,38,"HAdd.hAdd"],[41,42,"Eq"],[43,57,"Fixture.triple"]],"text":"Fixture.double_triple (n : Nat) : 𝟚n + n = Fixture.triple n"}
 {"decl":"Fixture.isDouble_double","refs":[[29,32,"Nat"],[36,52,"Fixture.IsDouble"],[56,57,"Fixture.double"]],"text":"Fixture.isDouble_double (n : Nat) : Fixture.IsDouble n (𝟚n)"}
 {"decl":"Eq","refs":[],"text":"Eq.{u_1} {α : Sort u_1} : α → α → Prop"}
-{"decl":"HAdd.hAdd","refs":[[51,59,"outParam"],[78,82,"HAdd"]],"text":"HAdd.hAdd.{u, v, w} {α : Type u} {β : Type v} {γ : outParam (Type w)} [self : HAdd α β γ] :\n  α → β → γ"}
-{"decl":"HMul.hMul","refs":[[51,59,"outParam"],[78,82,"HMul"]],"text":"HMul.hMul.{u, v, w} {α : Type u} {β : Type v} {γ : outParam (Type w)} [self : HMul α β γ] :\n  α → β → γ"}
+{"decl":"HAdd","refs":[[46,54,"outParam"]],"text":"HAdd.{u, v, w} (α : Type u) (β : Type v) (γ : outParam (Type w)) : Type (max (max u v) w)"}
+{"decl":"HMul","refs":[[46,54,"outParam"]],"text":"HMul.{u, v, w} (α : Type u) (β : Type v) (γ : outParam (Type w)) : Type (max (max u v) w)"}
 {"decl":"Inhabited","refs":[],"text":"Inhabited.{u} (α : Sort u) : Sort (max 1 u)"}
-{"decl":"Inhabited.mk","refs":[[46,55,"Inhabited"]],"text":"Inhabited.mk.{u} {α : Sort u} (default : α) : Inhabited α"}
-{"decl":"LT.lt","refs":[[31,33,"LT"]],"text":"LT.lt.{u} {α : Type u} [self : LT α] : α → α → Prop"}
+{"decl":"LT","refs":[],"text":"LT.{u} (α : Type u) : Type u"}
 {"decl":"Lean.Name.mkStr1","refs":[[23,29,"String"],[33,42,"Lean.Name"]],"text":"Lean.Name.mkStr1 (s₁ : String) : Lean.Name"}
 {"decl":"Lean.Name.mkStr2","refs":[[26,32,"String"],[36,45,"Lean.Name"]],"text":"Lean.Name.mkStr2 (s₁ s₂ : String) : Lean.Name"}
-{"decl":"Lean.Parser.Term.app","refs":[[23,49,"Lean.Parser.TrailingParser"]],"text":"Lean.Parser.Term.app : Lean.Parser.TrailingParser"}
 {"decl":"Lean.ParserDescr","refs":[],"text":"Lean.ParserDescr : Type"}
-{"decl":"Lean.ParserDescr.binary","refs":[[32,41,"Lean.Name"],[52,68,"Lean.ParserDescr"],[72,88,"Lean.ParserDescr"]],"text":"Lean.ParserDescr.binary (name : Lean.Name) (p₁ p₂ : Lean.ParserDescr) : Lean.ParserDescr"}
-{"decl":"Lean.ParserDescr.cat","refs":[[32,41,"Lean.Name"],[50,53,"Nat"],[57,73,"Lean.ParserDescr"]],"text":"Lean.ParserDescr.cat (catName : Lean.Name) (rbp : Nat) : Lean.ParserDescr"}
-{"decl":"Lean.ParserDescr.node","refs":[[30,49,"Lean.SyntaxNodeKind"],[59,62,"Nat"],[69,85,"Lean.ParserDescr"],[91,107,"Lean.ParserDescr"]],"text":"Lean.ParserDescr.node (kind : Lean.SyntaxNodeKind) (prec : Nat) (p : Lean.ParserDescr) :\n  Lean.ParserDescr"}
-{"decl":"Lean.ParserDescr.symbol","refs":[[31,37,"String"],[41,57,"Lean.ParserDescr"]],"text":"Lean.ParserDescr.symbol (val : String) : Lean.ParserDescr"}
 {"decl":"Nat","refs":[],"text":"Nat : Type"}
 {"decl":"Not","refs":[],"text":"Not (a : Prop) : Prop"}
-{"decl":"OfNat.ofNat","refs":[[35,38,"Nat"],[48,53,"OfNat"]],"text":"OfNat.ofNat.{u} {α : Type u} (x✝ : Nat) [self : OfNat α x✝] : α"}
+{"decl":"OfNat","refs":[[25,28,"Nat"]],"text":"OfNat.{u} (α : Type u) : Nat → Type u"}
 {"decl":"instAddNat","refs":[[13,16,"Add"],[17,20,"Nat"]],"text":"instAddNat : Add Nat"}
 {"decl":"instHAdd","refs":[[31,34,"Add"],[40,44,"HAdd"]],"text":"instHAdd.{u_1} {α : Type u_1} [Add α] : HAdd α α α"}
 {"decl":"instHMul","refs":[[31,34,"Mul"],[40,44,"HMul"]],"text":"instHMul.{u_1} {α : Type u_1} [Mul α] : HMul α α α"}
 {"decl":"instLTNat","refs":[[12,14,"LT"],[15,18,"Nat"]],"text":"instLTNat : LT Nat"}
 {"decl":"instMulNat","refs":[[13,16,"Mul"],[17,20,"Nat"]],"text":"instMulNat : Mul Nat"}
 {"decl":"instOfNatNat","refs":[[18,21,"Nat"],[25,30,"OfNat"],[31,34,"Nat"]],"text":"instOfNatNat (n : Nat) : OfNat Nat n"}
+{"decl":"outParam","refs":[],"text":"outParam.{u} (α : Sort u) : Sort u"}

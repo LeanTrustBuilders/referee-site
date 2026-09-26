@@ -77,20 +77,10 @@
 {"decl":"Bind","refs":[],"text":"Bind.{u, v} (m : Type u → Type v) : Type (max (u + 1) v)"}
 {"decl":"BitVec","refs":[[12,15,"Nat"]],"text":"BitVec (w : Nat) : Type"}
 {"decl":"BitVec.add","refs":[[16,19,"Nat"],[28,34,"BitVec"],[40,46,"BitVec"]],"text":"BitVec.add {n : Nat} (x y : BitVec n) : BitVec n"}
-{"decl":"BitVec.allOnes","refs":[[20,23,"Nat"],[27,33,"BitVec"]],"text":"BitVec.allOnes (n : Nat) : BitVec n"}
 {"decl":"BitVec.and","refs":[[16,19,"Nat"],[28,34,"BitVec"],[40,46,"BitVec"]],"text":"BitVec.and {n : Nat} (x y : BitVec n) : BitVec n"}
-{"decl":"BitVec.and_allOnes","refs":[[24,27,"Nat"],[34,40,"BitVec"],[48,51,"HAnd.hAnd"],[52,66,"BitVec.allOnes"],[69,70,"Eq"]],"text":"BitVec.and_allOnes {w : Nat} {x : BitVec w} : x &&& BitVec.allOnes w = x"}
-{"decl":"BitVec.and_append","refs":[[25,28,"Nat"],[39,45,"BitVec"],[58,64,"BitVec"],[75,77,"HAppend.hAppend"],[81,84,"HAnd.hAnd"],[88,90,"HAppend.hAppend"],[94,95,"Eq"],[100,103,"HAnd.hAnd"],[108,110,"HAppend.hAppend"],[115,118,"HAnd.hAnd"]],"text":"BitVec.and_append {w v : Nat} {x₁ x₂ : BitVec w} {y₁ y₂ : BitVec v} :\n  x₁ ++ y₁ &&& x₂ ++ y₂ = (x₁ &&& x₂) ++ (y₁ &&& y₂)"}
-{"decl":"BitVec.and_zero","refs":[[21,24,"Nat"],[31,37,"BitVec"],[45,48,"HAnd.hAnd"],[50,51,"BitVec.ofNat"],[53,54,"Eq"],[56,57,"BitVec.ofNat"]],"text":"BitVec.and_zero {w : Nat} {x : BitVec w} : x &&& 0#w = 0#w"}
-{"decl":"BitVec.append","refs":[[21,24,"Nat"],[34,40,"BitVec"],[52,58,"BitVec"],[64,70,"BitVec"],[74,75,"HAdd.hAdd"]],"text":"BitVec.append {n m : Nat} (msbs : BitVec n) (lsbs : BitVec m) : BitVec (n + m)"}
-{"decl":"BitVec.append_left_inj","refs":[[31,34,"Nat"],[45,51,"BitVec"],[60,66,"BitVec"],[76,78,"HAppend.hAppend"],[81,82,"Eq"],[86,88,"HAppend.hAppend"],[91,92,"Iff"],[96,97,"Eq"]],"text":"BitVec.append_left_inj {w w' : Nat} {s₁ s₂ : BitVec w} (t : BitVec w') : s₁ ++ t = s₂ ++ t ↔ s₁ = s₂"}
 {"decl":"BitVec.decEq","refs":[[18,21,"Nat"],[30,36,"BitVec"],[42,51,"Decidable"],[55,56,"Eq"]],"text":"BitVec.decEq {w : Nat} (x y : BitVec w) : Decidable (x = y)"}
-{"decl":"BitVec.extractLsb'","refs":[[24,27,"Nat"],[42,45,"Nat"],[52,58,"BitVec"],[64,70,"BitVec"]],"text":"BitVec.extractLsb' {n : Nat} (start len : Nat) (x : BitVec n) : BitVec len"}
-{"decl":"BitVec.extractLsb'_append_extractLsb'_eq_extractLsb'","refs":[[82,85,"Nat"],[94,100,"BitVec"],[116,117,"Eq"],[125,126,"HAdd.hAdd"],[137,155,"BitVec.extractLsb'"],[170,172,"HAppend.hAppend"],[173,191,"BitVec.extractLsb'"],[206,207,"Eq"],[212,230,"BitVec.extractLsb'"],[244,245,"HAdd.hAdd"]],"text":"BitVec.extractLsb'_append_extractLsb'_eq_extractLsb' {w start₂ start₁ len₁ len₂ : Nat}\n  {x : BitVec w} (h : start₂ = start₁ + len₁) :\n  BitVec.extractLsb' start₂ len₂ x ++ BitVec.extractLsb' start₁ len₁ x =\n    BitVec.extractLsb' start₁ (len₂ + len₁) x"}
-{"decl":"BitVec.extractLsb'_eq_self","refs":[[32,35,"Nat"],[42,48,"BitVec"],[54,72,"BitVec.extractLsb'"],[79,80,"Eq"]],"text":"BitVec.extractLsb'_eq_self {w : Nat} {x : BitVec w} : BitVec.extractLsb' 0 w x = x"}
 {"decl":"BitVec.instAdd","refs":[[20,23,"Nat"],[27,30,"Add"],[32,38,"BitVec"]],"text":"BitVec.instAdd {n : Nat} : Add (BitVec n)"}
 {"decl":"BitVec.instAndOp","refs":[[22,25,"Nat"],[29,34,"AndOp"],[36,42,"BitVec"]],"text":"BitVec.instAndOp {w : Nat} : AndOp (BitVec w)"}
-{"decl":"BitVec.instHAppendHAddNat","refs":[[33,36,"Nat"],[40,47,"HAppend"],[49,55,"BitVec"],[60,66,"BitVec"],[71,77,"BitVec"],[81,82,"HAdd.hAdd"]],"text":"BitVec.instHAppendHAddNat {w v : Nat} : HAppend (BitVec w) (BitVec v) (BitVec (w + v))"}
 {"decl":"BitVec.instHShiftLeft","refs":[[29,32,"Nat"],[36,46,"HShiftLeft"],[48,54,"BitVec"],[59,65,"BitVec"],[70,76,"BitVec"]],"text":"BitVec.instHShiftLeft {m n : Nat} : HShiftLeft (BitVec m) (BitVec n) (BitVec m)"}
 {"decl":"BitVec.instHShiftLeftNat","refs":[[30,33,"Nat"],[37,47,"HShiftLeft"],[49,55,"BitVec"],[59,62,"Nat"],[64,70,"BitVec"]],"text":"BitVec.instHShiftLeftNat {w : Nat} : HShiftLeft (BitVec w) Nat (BitVec w)"}
 {"decl":"BitVec.instHShiftRight","refs":[[30,33,"Nat"],[37,48,"HShiftRight"],[50,56,"BitVec"],[61,67,"BitVec"],[72,78,"BitVec"]],"text":"BitVec.instHShiftRight {m n : Nat} : HShiftRight (BitVec m) (BitVec n) (BitVec m)"}
@@ -100,20 +90,13 @@
 {"decl":"BitVec.instSub","refs":[[20,23,"Nat"],[27,30,"Sub"],[32,38,"BitVec"]],"text":"BitVec.instSub {n : Nat} : Sub (BitVec n)"}
 {"decl":"BitVec.instXorOp","refs":[[22,25,"Nat"],[29,34,"XorOp"],[36,42,"BitVec"]],"text":"BitVec.instXorOp {w : Nat} : XorOp (BitVec w)"}
 {"decl":"BitVec.isLt","refs":[[17,20,"Nat"],[27,33,"BitVec"],[41,46,"BitVec.toNat"],[47,48,"LT.lt"],[51,52,"HPow.hPow"]],"text":"BitVec.isLt {w : Nat} (x : BitVec w) : x.toNat < 2 ^ w"}
-{"decl":"BitVec.lt_def","refs":[[19,22,"Nat"],[31,37,"BitVec"],[45,46,"LT.lt"],[49,50,"Iff"],[53,58,"BitVec.toNat"],[59,60,"LT.lt"],[63,68,"BitVec.toNat"]],"text":"BitVec.lt_def {n : Nat} {x y : BitVec n} : x < y ↔ x.toNat < y.toNat"}
 {"decl":"BitVec.neg","refs":[[16,19,"Nat"],[26,32,"BitVec"],[38,44,"BitVec"]],"text":"BitVec.neg {n : Nat} (x : BitVec n) : BitVec n"}
 {"decl":"BitVec.ofNat","refs":[[20,23,"Nat"],[27,33,"BitVec"]],"text":"BitVec.ofNat (n i : Nat) : BitVec n"}
 {"decl":"BitVec.ofNatLT","refs":[[20,23,"Nat"],[30,33,"Nat"],[42,43,"LT.lt"],[46,47,"HPow.hPow"],[53,59,"BitVec"]],"text":"BitVec.ofNatLT {w : Nat} (i : Nat) (p : i < 2 ^ w) : BitVec w"}
 {"decl":"BitVec.or","refs":[[15,18,"Nat"],[27,33,"BitVec"],[39,45,"BitVec"]],"text":"BitVec.or {n : Nat} (x y : BitVec n) : BitVec n"}
-{"decl":"BitVec.setWidth","refs":[[21,24,"Nat"],[31,34,"Nat"],[41,47,"BitVec"],[53,59,"BitVec"]],"text":"BitVec.setWidth {w : Nat} (v : Nat) (x : BitVec w) : BitVec v"}
-{"decl":"BitVec.setWidth'","refs":[[24,27,"Nat"],[37,38,"LE.le"],[47,53,"BitVec"],[59,65,"BitVec"]],"text":"BitVec.setWidth' {n w : Nat} (le : n ≤ w) (x : BitVec n) : BitVec w"}
 {"decl":"BitVec.shiftLeft","refs":[[22,25,"Nat"],[32,38,"BitVec"],[47,50,"Nat"],[54,60,"BitVec"]],"text":"BitVec.shiftLeft {n : Nat} (x : BitVec n) (s : Nat) : BitVec n"}
-{"decl":"BitVec.shiftLeftZeroExtend","refs":[[32,35,"Nat"],[45,51,"BitVec"],[60,63,"Nat"],[67,73,"BitVec"],[77,78,"HAdd.hAdd"]],"text":"BitVec.shiftLeftZeroExtend {w : Nat} (msbs : BitVec w) (m : Nat) : BitVec (w + m)"}
 {"decl":"BitVec.sub","refs":[[16,19,"Nat"],[28,34,"BitVec"],[40,46,"BitVec"]],"text":"BitVec.sub {n : Nat} (x y : BitVec n) : BitVec n"}
 {"decl":"BitVec.toNat","refs":[[18,21,"Nat"],[28,34,"BitVec"],[40,43,"Nat"]],"text":"BitVec.toNat {w : Nat} (x : BitVec w) : Nat"}
-{"decl":"BitVec.toNat_append","refs":[[27,30,"Nat"],[37,43,"BitVec"],[52,58,"BitVec"],[69,71,"HAppend.hAppend"],[75,80,"BitVec.toNat"],[81,82,"Eq"],[85,90,"BitVec.toNat"],[91,94,"HShiftLeft.hShiftLeft"],[97,100,"HOr.hOr"],[103,108,"BitVec.toNat"]],"text":"BitVec.toNat_append {m n : Nat} (x : BitVec m) (y : BitVec n) :\n  (x ++ y).toNat = x.toNat <<< n ||| y.toNat"}
-{"decl":"BitVec.toNat_ofNat","refs":[[26,29,"Nat"],[34,46,"BitVec.ofNat"],[52,57,"BitVec.toNat"],[58,59,"Eq"],[62,63,"HMod.hMod"],[66,67,"HPow.hPow"]],"text":"BitVec.toNat_ofNat (x w : Nat) : (BitVec.ofNat w x).toNat = x % 2 ^ w"}
-{"decl":"BitVec.toNat_setWidth","refs":[[27,30,"Nat"],[37,40,"Nat"],[47,53,"BitVec"],[62,77,"BitVec.setWidth"],[83,88,"BitVec.toNat"],[89,90,"Eq"],[93,98,"BitVec.toNat"],[99,100,"HMod.hMod"],[103,104,"HPow.hPow"]],"text":"BitVec.toNat_setWidth {n : Nat} (i : Nat) (x : BitVec n) :\n  (BitVec.setWidth i x).toNat = x.toNat % 2 ^ i"}
 {"decl":"BitVec.umod","refs":[[17,20,"Nat"],[29,35,"BitVec"],[41,47,"BitVec"]],"text":"BitVec.umod {n : Nat} (x y : BitVec n) : BitVec n"}
 {"decl":"BitVec.ushiftRight","refs":[[24,27,"Nat"],[34,40,"BitVec"],[49,52,"Nat"],[56,62,"BitVec"]],"text":"BitVec.ushiftRight {n : Nat} (x : BitVec n) (s : Nat) : BitVec n"}
 {"decl":"BitVec.xor","refs":[[16,19,"Nat"],[28,34,"BitVec"],[40,46,"BitVec"]],"text":"BitVec.xor {n : Nat} (x y : BitVec n) : BitVec n"}
@@ -155,7 +138,6 @@
 {"decl":"ByteArray.utf8DecodeChar?.assemble₄Unchecked","refs":[[56,61,"UInt8"],[65,71,"UInt32"]],"text":"ByteArray.utf8DecodeChar?.assemble₄Unchecked (w x y z : UInt8) : UInt32"}
 {"decl":"ByteArray.utf8DecodeChar?.isInvalidContinuationByte","refs":[[57,62,"UInt8"],[66,70,"Bool"]],"text":"ByteArray.utf8DecodeChar?.isInvalidContinuationByte (b : UInt8) : Bool"}
 {"decl":"ByteArray.utf8DecodeChar?.parseFirstByte","refs":[[46,51,"UInt8"],[55,90,"ByteArray.utf8DecodeChar?.FirstByte"]],"text":"ByteArray.utf8DecodeChar?.parseFirstByte (b : UInt8) : ByteArray.utf8DecodeChar?.FirstByte"}
-{"decl":"ByteArray.utf8DecodeChar?.parseFirstByte.fun_cases_unfolding","refs":[[66,71,"UInt8"],[85,120,"ByteArray.utf8DecodeChar?.FirstByte"],[143,146,"HAnd.hAnd"],[151,153,"BEq.beq"],[157,158,"Eq"],[159,163,"Bool.true"],[173,213,"ByteArray.utf8DecodeChar?.FirstByte.done"],[230,231,"Not"],[234,237,"HAnd.hAnd"],[242,244,"BEq.beq"],[248,249,"Eq"],[250,254,"Bool.true"],[266,269,"HAnd.hAnd"],[274,276,"BEq.beq"],[282,283,"Eq"],[284,288,"Bool.true"],[298,341,"ByteArray.utf8DecodeChar?.FirstByte.oneMore"],[358,359,"Not"],[362,365,"HAnd.hAnd"],[370,372,"BEq.beq"],[376,377,"Eq"],[378,382,"Bool.true"],[391,392,"Not"],[395,398,"HAnd.hAnd"],[403,405,"BEq.beq"],[411,412,"Eq"],[413,417,"Bool.true"],[431,434,"HAnd.hAnd"],[439,441,"BEq.beq"],[447,448,"Eq"],[449,453,"Bool.true"],[463,506,"ByteArray.utf8DecodeChar?.FirstByte.twoMore"],[523,524,"Not"],[527,530,"HAnd.hAnd"],[535,537,"BEq.beq"],[541,542,"Eq"],[543,547,"Bool.true"],[556,557,"Not"],[560,563,"HAnd.hAnd"],[568,570,"BEq.beq"],[576,577,"Eq"],[578,582,"Bool.true"],[593,594,"Not"],[597,600,"HAnd.hAnd"],[605,607,"BEq.beq"],[613,614,"Eq"],[615,619,"Bool.true"],[635,638,"HAnd.hAnd"],[643,645,"BEq.beq"],[651,652,"Eq"],[653,657,"Bool.true"],[667,712,"ByteArray.utf8DecodeChar?.FirstByte.threeMore"],[729,730,"Not"],[733,736,"HAnd.hAnd"],[741,743,"BEq.beq"],[747,748,"Eq"],[749,753,"Bool.true"],[762,763,"Not"],[766,769,"HAnd.hAnd"],[774,776,"BEq.beq"],[782,783,"Eq"],[784,788,"Bool.true"],[799,800,"Not"],[803,806,"HAnd.hAnd"],[811,813,"BEq.beq"],[819,820,"Eq"],[821,825,"Bool.true"],[838,839,"Not"],[842,845,"HAnd.hAnd"],[850,852,"BEq.beq"],[858,859,"Eq"],[860,864,"Bool.true"],[874,917,"ByteArray.utf8DecodeChar?.FirstByte.invalid"],[931,971,"ByteArray.utf8DecodeChar?.parseFirstByte"]],"text":"ByteArray.utf8DecodeChar?.parseFirstByte.fun_cases_unfolding (b : UInt8)\n  (motive : ByteArray.utf8DecodeChar?.FirstByte → Prop)\n  (case1 : (b &&& 128 == 0) = true → motive ByteArray.utf8DecodeChar?.FirstByte.done)\n  (case2 :\n    ¬(b &&& 128 == 0) = true →\n      (b &&& 224 == 192) = true → motive ByteArray.utf8DecodeChar?.FirstByte.oneMore)\n  (case3 :\n    ¬(b &&& 128 == 0) = true →\n      ¬(b &&& 224 == 192) = true →\n        (b &&& 240 == 224) = true → motive ByteArray.utf8DecodeChar?.FirstByte.twoMore)\n  (case4 :\n    ¬(b &&& 128 == 0) = true →\n      ¬(b &&& 224 == 192) = true →\n        ¬(b &&& 240 == 224) = true →\n          (b &&& 248 == 240) = true → motive ByteArray.utf8DecodeChar?.FirstByte.threeMore)\n  (case5 :\n    ¬(b &&& 128 == 0) = true →\n      ¬(b &&& 224 == 192) = true →\n        ¬(b &&& 240 == 224) = true →\n          ¬(b &&& 248 == 240) = true → motive ByteArray.utf8DecodeChar?.FirstByte.invalid) :\n  motive (ByteArray.utf8DecodeChar?.parseFirstByte b)"}
 {"decl":"Char","refs":[],"text":"Char : Type"}
 {"decl":"Char.ext","refs":[[16,20,"Char"],[26,29,"Char.val"],[30,31,"Eq"],[34,37,"Char.val"],[42,43,"Eq"]],"text":"Char.ext {c d : Char} : c.val = d.val → c = d"}
 {"decl":"Char.instDecidableLe","refs":[[28,32,"Char"],[36,45,"Decidable"],[49,50,"LE.le"]],"text":"Char.instDecidableLe (a b : Char) : Decidable (a ≤ b)"}
@@ -217,7 +199,6 @@
 {"decl":"GetElem","refs":[[57,65,"outParam"],[87,95,"outParam"]],"text":"GetElem.{u, v, w} (coll : Type u) (idx : Type v) (elem : outParam (Type w))\n  (valid : outParam (coll → idx → Prop)) : Type (max (max u v) w)"}
 {"decl":"GetElem?","refs":[[58,66,"outParam"],[88,96,"outParam"]],"text":"GetElem?.{u, v, w} (coll : Type u) (idx : Type v) (elem : outParam (Type w))\n  (valid : outParam (coll → idx → Prop)) : Type (max (max u v) w)"}
 {"decl":"HAdd","refs":[[46,54,"outParam"]],"text":"HAdd.{u, v, w} (α : Type u) (β : Type v) (γ : outParam (Type w)) : Type (max (max u v) w)"}
-{"decl":"HAdd.hAdd","refs":[[51,59,"outParam"],[78,82,"HAdd"]],"text":"HAdd.hAdd.{u, v, w} {α : Type u} {β : Type v} {γ : outParam (Type w)} [self : HAdd α β γ] :\n  α → β → γ"}
 {"decl":"HAnd","refs":[[46,54,"outParam"]],"text":"HAnd.{u, v, w} (α : Type u) (β : Type v) (γ : outParam (Type w)) : Type (max (max u v) w)"}
 {"decl":"HAndThen","refs":[[50,58,"outParam"]],"text":"HAndThen.{u, v, w} (α : Type u) (β : Type v) (γ : outParam (Type w)) : Type (max (max u v) w)"}
 {"decl":"HAppend","refs":[[49,57,"outParam"]],"text":"HAppend.{u, v, w} (α : Type u) (β : Type v) (γ : outParam (Type w)) : Type (max (max u v) w)"}
@@ -225,7 +206,6 @@
 {"decl":"HEq","refs":[],"text":"HEq.{u} {α : Sort u} : α → {β : Sort u} → β → Prop"}
 {"decl":"HMod","refs":[[46,54,"outParam"]],"text":"HMod.{u, v, w} (α : Type u) (β : Type v) (γ : outParam (Type w)) : Type (max (max u v) w)"}
 {"decl":"HMul","refs":[[46,54,"outParam"]],"text":"HMul.{u, v, w} (α : Type u) (β : Type v) (γ : outParam (Type w)) : Type (max (max u v) w)"}
-{"decl":"HMul.hMul","refs":[[51,59,"outParam"],[78,82,"HMul"]],"text":"HMul.hMul.{u, v, w} {α : Type u} {β : Type v} {γ : outParam (Type w)} [self : HMul α β γ] :\n  α → β → γ"}
 {"decl":"HOr","refs":[[45,53,"outParam"]],"text":"HOr.{u, v, w} (α : Type u) (β : Type v) (γ : outParam (Type w)) : Type (max (max u v) w)"}
 {"decl":"HOrElse","refs":[[49,57,"outParam"]],"text":"HOrElse.{u, v, w} (α : Type u) (β : Type v) (γ : outParam (Type w)) : Type (max (max u v) w)"}
 {"decl":"HPow","refs":[[46,54,"outParam"]],"text":"HPow.{u, v, w} (α : Type u) (β : Type v) (γ : outParam (Type w)) : Type (max (max u v) w)"}
@@ -243,10 +223,8 @@
 {"decl":"Id.instMonad","refs":[[21,26,"Monad"],[27,29,"Id"]],"text":"Id.instMonad.{u_1} : Monad Id"}
 {"decl":"Id.run","refs":[[33,35,"Id"]],"text":"Id.run.{u_1} {α : Type u_1} (x : Id α) : α"}
 {"decl":"Iff","refs":[],"text":"Iff (a b : Prop) : Prop"}
-{"decl":"Iff.rfl","refs":[[23,24,"Iff"]],"text":"Iff.rfl {a : Prop} : a ↔ a"}
 {"decl":"Iff.symm","refs":[[29,30,"Iff"],[38,39,"Iff"]],"text":"Iff.symm {a b : Prop} (h : a ↔ b) : b ↔ a"}
 {"decl":"Inhabited","refs":[],"text":"Inhabited.{u} (α : Sort u) : Sort (max 1 u)"}
-{"decl":"Inhabited.mk","refs":[[46,55,"Inhabited"]],"text":"Inhabited.mk.{u} {α : Sort u} (default : α) : Inhabited α"}
 {"decl":"Int","refs":[],"text":"Int : Type"}
 {"decl":"Int.NonNeg","refs":[[13,16,"Int"]],"text":"Int.NonNeg : Int → Prop"}
 {"decl":"Int.add","refs":[[15,18,"Int"],[22,25,"Int"]],"text":"Int.add (m n : Int) : Int"}
@@ -286,7 +264,6 @@
 {"decl":"InvImage.wf","refs":[[81,92,"WellFounded"],[100,111,"WellFounded"],[113,121,"InvImage"]],"text":"InvImage.wf.{u, v} {α : Sort u} {β : Sort v} {r : β → β → Prop} (f : α → β) (h : WellFounded r) :\n  WellFounded (InvImage r f)"}
 {"decl":"LE","refs":[],"text":"LE.{u} (α : Type u) : Type u"}
 {"decl":"LT","refs":[],"text":"LT.{u} (α : Type u) : Type u"}
-{"decl":"LT.lt","refs":[[31,33,"LT"]],"text":"LT.lt.{u} {α : Type u} [self : LT α] : α → α → Prop"}
 {"decl":"LawfulBEq","refs":[[28,31,"BEq"]],"text":"LawfulBEq.{u} (α : Type u) [BEq α] : Prop"}
 {"decl":"LawfulHashable","refs":[[33,36,"BEq"],[41,49,"Hashable"]],"text":"LawfulHashable.{u} (α : Type u) [BEq α] [Hashable α] : Prop"}
 {"decl":"Lean.AsyncBranch","refs":[],"text":"Lean.AsyncBranch : Type"}
@@ -637,10 +614,6 @@
 {"decl":"Lean.Parser.withoutInfo","refs":[[29,47,"Lean.Parser.Parser"],[51,69,"Lean.Parser.Parser"]],"text":"Lean.Parser.withoutInfo (p : Lean.Parser.Parser) : Lean.Parser.Parser"}
 {"decl":"Lean.Parser.withoutPosition","refs":[[33,51,"Lean.Parser.Parser"],[55,73,"Lean.Parser.Parser"]],"text":"Lean.Parser.withoutPosition (p : Lean.Parser.Parser) : Lean.Parser.Parser"}
 {"decl":"Lean.ParserDescr","refs":[],"text":"Lean.ParserDescr : Type"}
-{"decl":"Lean.ParserDescr.binary","refs":[[32,41,"Lean.Name"],[52,68,"Lean.ParserDescr"],[72,88,"Lean.ParserDescr"]],"text":"Lean.ParserDescr.binary (name : Lean.Name) (p₁ p₂ : Lean.ParserDescr) : Lean.ParserDescr"}
-{"decl":"Lean.ParserDescr.cat","refs":[[32,41,"Lean.Name"],[50,53,"Nat"],[57,73,"Lean.ParserDescr"]],"text":"Lean.ParserDescr.cat (catName : Lean.Name) (rbp : Nat) : Lean.ParserDescr"}
-{"decl":"Lean.ParserDescr.node","refs":[[30,49,"Lean.SyntaxNodeKind"],[59,62,"Nat"],[69,85,"Lean.ParserDescr"],[91,107,"Lean.ParserDescr"]],"text":"Lean.ParserDescr.node (kind : Lean.SyntaxNodeKind) (prec : Nat) (p : Lean.ParserDescr) :\n  Lean.ParserDescr"}
-{"decl":"Lean.ParserDescr.symbol","refs":[[31,37,"String"],[41,57,"Lean.ParserDescr"]],"text":"Lean.ParserDescr.symbol (val : String) : Lean.ParserDescr"}
 {"decl":"Lean.PersistentHashMap","refs":[[57,60,"BEq"],[65,73,"Hashable"]],"text":"Lean.PersistentHashMap.{u, v} (α : Type u) (β : Type v) [BEq α] [Hashable α] : Type (max u v)"}
 {"decl":"Lean.PersistentHashMap.Entry","refs":[],"text":"Lean.PersistentHashMap.Entry.{u, v, w} (α : Type u) (β : Type v) (σ : Type w) :\n  Type (max (max u v) w)"}
 {"decl":"Lean.PersistentHashMap.Node","refs":[],"text":"Lean.PersistentHashMap.Node.{u, v} (α : Type u) (β : Type v) : Type (max u v)"}
@@ -837,10 +810,8 @@
 {"decl":"Nat.isValidChar","refs":[[21,24,"Nat"]],"text":"Nat.isValidChar (n : Nat) : Prop"}
 {"decl":"Nat.land","refs":[[11,14,"Nat"],[17,20,"Nat"],[23,26,"Nat"]],"text":"Nat.land : Nat → Nat → Nat"}
 {"decl":"Nat.le","refs":[[12,15,"Nat"],[19,22,"Nat"]],"text":"Nat.le (n : Nat) : Nat → Prop"}
-{"decl":"Nat.le_add_left","refs":[[23,26,"Nat"],[32,33,"LE.le"],[36,37,"HAdd.hAdd"]],"text":"Nat.le_add_left (n m : Nat) : n ≤ m + n"}
 {"decl":"Nat.le_add_right","refs":[[24,27,"Nat"],[33,34,"LE.le"],[37,38,"HAdd.hAdd"]],"text":"Nat.le_add_right (n k : Nat) : n ≤ n + k"}
 {"decl":"Nat.le_of_ble_eq_true","refs":[[29,32,"Nat"],[41,44,"Nat.ble"],[47,48,"Eq"],[49,53,"Bool.true"],[59,60,"LE.le"]],"text":"Nat.le_of_ble_eq_true {n m : Nat} (h : n.ble m = true) : n ≤ m"}
-{"decl":"Nat.le_of_eq","refs":[[20,23,"Nat"],[32,33,"Eq"],[41,42,"LE.le"]],"text":"Nat.le_of_eq {n m : Nat} (p : n = m) : n ≤ m"}
 {"decl":"Nat.le_of_lt","refs":[[20,23,"Nat"],[29,30,"LT.lt"],[37,38,"LE.le"]],"text":"Nat.le_of_lt {n m : Nat} : n < m → n ≤ m"}
 {"decl":"Nat.le_of_lt_add_one","refs":[[28,31,"Nat"],[37,38,"LT.lt"],[41,42,"HAdd.hAdd"],[49,50,"LE.le"]],"text":"Nat.le_of_lt_add_one {n m : Nat} : n < m + 1 → n ≤ m"}
 {"decl":"Nat.le_of_not_lt","refs":[[24,27,"Nat"],[31,32,"Not"],[34,35,"LT.lt"],[42,43,"LE.le"]],"text":"Nat.le_of_not_lt {a b : Nat} : ¬a < b → b ≤ a"}
@@ -866,7 +837,6 @@
 {"decl":"Nat.mul","refs":[[10,13,"Nat"],[16,19,"Nat"],[22,25,"Nat"]],"text":"Nat.mul : Nat → Nat → Nat"}
 {"decl":"Nat.mul_comm","refs":[[20,23,"Nat"],[29,30,"HMul.hMul"],[33,34,"Eq"],[37,38,"HMul.hMul"]],"text":"Nat.mul_comm (n m : Nat) : n * m = m * n"}
 {"decl":"Nat.mul_lt_mul_of_lt_of_le'","refs":[[39,42,"Nat"],[53,54,"LT.lt"],[67,68,"LE.le"],[80,81,"LT.lt"],[89,90,"HMul.hMul"],[93,94,"LT.lt"],[97,98,"HMul.hMul"]],"text":"Nat.mul_lt_mul_of_lt_of_le' {a c b d : Nat} (hac : a < c) (hbd : b ≤ d) (hb : 0 < b) : a * b < c * d"}
-{"decl":"Nat.mul_lt_mul_of_pos_right","refs":[[37,40,"Nat"],[49,50,"LT.lt"],[62,63,"GT.gt"],[71,72,"HMul.hMul"],[75,76,"LT.lt"],[79,80,"HMul.hMul"]],"text":"Nat.mul_lt_mul_of_pos_right {n m k : Nat} (h : n < m) (hk : k > 0) : n * k < m * k"}
 {"decl":"Nat.mul_one","refs":[[17,20,"Nat"],[26,27,"HMul.hMul"],[30,31,"Eq"]],"text":"Nat.mul_one (n : Nat) : n * 1 = n"}
 {"decl":"Nat.mul_pos","refs":[[19,22,"Nat"],[32,33,"LT.lt"],[45,46,"LT.lt"],[54,55,"LT.lt"],[58,59,"HMul.hMul"]],"text":"Nat.mul_pos {n m : Nat} (hn : 0 < n) (hm : 0 < m) : 0 < n * m"}
 {"decl":"Nat.mul_pos_iff_of_pos_right","refs":[[36,39,"Nat"],[48,49,"LT.lt"],[57,58,"LT.lt"],[61,62,"HMul.hMul"],[65,66,"Iff"],[69,70,"LT.lt"]],"text":"Nat.mul_pos_iff_of_pos_right {a b : Nat} (h : 0 < b) : 0 < a * b ↔ 0 < a"}
@@ -879,9 +849,6 @@
 {"decl":"Nat.or_lt_two_pow","refs":[[27,30,"Nat"],[42,43,"LT.lt"],[46,47,"HPow.hPow"],[62,63,"LT.lt"],[66,67,"HPow.hPow"],[75,78,"HOr.hOr"],[81,82,"LT.lt"],[85,86,"HPow.hPow"]],"text":"Nat.or_lt_two_pow {x y n : Nat} (left : x < 2 ^ n) (right : y < 2 ^ n) : x ||| y < 2 ^ n"}
 {"decl":"Nat.pos_of_isPowerOfTwo","refs":[[29,32,"Nat"],[41,53,"Nat.isPowerOfTwo"],[59,60,"GT.gt"]],"text":"Nat.pos_of_isPowerOfTwo {n : Nat} (h : n.isPowerOfTwo) : n > 0"}
 {"decl":"Nat.pow","refs":[[13,16,"Nat"],[20,23,"Nat"],[26,29,"Nat"]],"text":"Nat.pow (m : Nat) : Nat → Nat"}
-{"decl":"Nat.pow_add","refs":[[21,24,"Nat"],[30,31,"HPow.hPow"],[35,36,"HAdd.hAdd"],[40,41,"Eq"],[44,45,"HPow.hPow"],[48,49,"HMul.hMul"],[52,53,"HPow.hPow"]],"text":"Nat.pow_add (a m n : Nat) : a ^ (m + n) = a ^ m * a ^ n"}
-{"decl":"Nat.pow_le_pow_right","refs":[[26,29,"Nat"],[39,40,"GT.gt"],[51,54,"Nat"],[60,61,"LE.le"],[68,69,"HPow.hPow"],[72,73,"LE.le"],[76,77,"HPow.hPow"]],"text":"Nat.pow_le_pow_right {n : Nat} (hx : n > 0) {i j : Nat} : i ≤ j → n ^ i ≤ n ^ j"}
-{"decl":"Nat.pow_one","refs":[[17,20,"Nat"],[26,27,"HPow.hPow"],[30,31,"Eq"]],"text":"Nat.pow_one (a : Nat) : a ^ 1 = a"}
 {"decl":"Nat.pow_pos","refs":[[19,22,"Nat"],[31,32,"LT.lt"],[40,41,"LT.lt"],[44,45,"HPow.hPow"]],"text":"Nat.pow_pos {a n : Nat} (h : 0 < a) : 0 < a ^ n"}
 {"decl":"Nat.pred","refs":[[11,14,"Nat"],[17,20,"Nat"]],"text":"Nat.pred : Nat → Nat"}
 {"decl":"Nat.repr","refs":[[14,17,"Nat"],[21,27,"String"]],"text":"Nat.repr (n : Nat) : String"}
@@ -890,7 +857,6 @@
 {"decl":"Nat.shiftRight","refs":[[17,20,"Nat"],[23,26,"Nat"],[29,32,"Nat"]],"text":"Nat.shiftRight : Nat → Nat → Nat"}
 {"decl":"Nat.shiftRight_eq_div_pow","refs":[[33,36,"Nat"],[42,45,"HShiftRight.hShiftRight"],[48,49,"Eq"],[52,53,"HDiv.hDiv"],[56,57,"HPow.hPow"]],"text":"Nat.shiftRight_eq_div_pow (m n : Nat) : m >>> n = m / 2 ^ n"}
 {"decl":"Nat.sub","refs":[[10,13,"Nat"],[16,19,"Nat"],[22,25,"Nat"]],"text":"Nat.sub : Nat → Nat → Nat"}
-{"decl":"Nat.sub_add_cancel","refs":[[26,29,"Nat"],[38,39,"LE.le"],[47,48,"HSub.hSub"],[51,52,"HAdd.hAdd"],[55,56,"Eq"]],"text":"Nat.sub_add_cancel {n m : Nat} (h : m ≤ n) : n - m + m = n"}
 {"decl":"Nat.sub_lt","refs":[[18,21,"Nat"],[27,28,"LT.lt"],[35,36,"LT.lt"],[43,44,"HSub.hSub"],[47,48,"LT.lt"]],"text":"Nat.sub_lt {n m : Nat} : 0 < n → 0 < m → n - m < n"}
 {"decl":"Nat.sub_self","refs":[[18,21,"Nat"],[27,28,"HSub.hSub"],[31,32,"Eq"]],"text":"Nat.sub_self (n : Nat) : n - n = 0"}
 {"decl":"Nat.sub_succ_lt_self","refs":[[28,31,"Nat"],[40,41,"LT.lt"],[49,50,"HSub.hSub"],[54,55,"HAdd.hAdd"],[59,60,"LT.lt"],[63,64,"HSub.hSub"]],"text":"Nat.sub_succ_lt_self (a i : Nat) (h : i < a) : a - (i + 1) < a - i"}
@@ -903,13 +869,10 @@
 {"decl":"Nat.two_pow_pos","refs":[[21,24,"Nat"],[30,31,"LT.lt"],[34,35,"HPow.hPow"]],"text":"Nat.two_pow_pos (w : Nat) : 0 < 2 ^ w"}
 {"decl":"Nat.xor","refs":[[10,13,"Nat"],[16,19,"Nat"],[22,25,"Nat"]],"text":"Nat.xor : Nat → Nat → Nat"}
 {"decl":"Nat.xor_lt_two_pow","refs":[[28,31,"Nat"],[43,44,"LT.lt"],[47,48,"HPow.hPow"],[63,64,"LT.lt"],[67,68,"HPow.hPow"],[76,79,"HXor.hXor"],[82,83,"LT.lt"],[86,87,"HPow.hPow"]],"text":"Nat.xor_lt_two_pow {x y n : Nat} (left : x < 2 ^ n) (right : y < 2 ^ n) : x ^^^ y < 2 ^ n"}
-{"decl":"Nat.zero_add","refs":[[18,21,"Nat"],[27,28,"HAdd.hAdd"],[31,32,"Eq"]],"text":"Nat.zero_add (n : Nat) : 0 + n = n"}
 {"decl":"Nat.zero_le","refs":[[17,20,"Nat"],[26,27,"LE.le"]],"text":"Nat.zero_le (n : Nat) : 0 ≤ n"}
 {"decl":"Nat.zero_lt_of_ne_zero","refs":[[28,31,"Nat"],[40,41,"Ne"],[49,50,"LT.lt"]],"text":"Nat.zero_lt_of_ne_zero {a : Nat} (h : a ≠ 0) : 0 < a"}
 {"decl":"Nat.zero_lt_one","refs":[[20,21,"LT.lt"]],"text":"Nat.zero_lt_one : 0 < 1"}
 {"decl":"Nat.zero_lt_succ","refs":[[22,25,"Nat"],[31,32,"LT.lt"],[35,39,"Nat.succ"]],"text":"Nat.zero_lt_succ (n : Nat) : 0 < n.succ"}
-{"decl":"Nat.zero_or","refs":[[17,20,"Nat"],[26,29,"HOr.hOr"],[32,33,"Eq"]],"text":"Nat.zero_or (x : Nat) : 0 ||| x = x"}
-{"decl":"Nat.zero_shiftLeft","refs":[[24,27,"Nat"],[33,36,"HShiftLeft.hShiftLeft"],[39,40,"Eq"]],"text":"Nat.zero_shiftLeft (n : Nat) : 0 <<< n = 0"}
 {"decl":"NatCast","refs":[],"text":"NatCast.{u} (R : Type u) : Type u"}
 {"decl":"NatPow","refs":[],"text":"NatPow.{u} (α : Type u) : Type u"}
 {"decl":"Ne","refs":[],"text":"Ne.{u} {α : Sort u} (a b : α) : Prop"}
@@ -921,7 +884,6 @@
 {"decl":"NonemptyType.type","refs":[[30,42,"NonemptyType"]],"text":"NonemptyType.type.{u} (type : NonemptyType) : Type u"}
 {"decl":"Not","refs":[],"text":"Not (a : Prop) : Prop"}
 {"decl":"OfNat","refs":[[25,28,"Nat"]],"text":"OfNat.{u} (α : Type u) : Nat → Type u"}
-{"decl":"OfNat.ofNat","refs":[[35,38,"Nat"],[48,53,"OfNat"]],"text":"OfNat.ofNat.{u} {α : Type u} (x✝ : Nat) [self : OfNat α x✝] : α"}
 {"decl":"Option","refs":[],"text":"Option.{u} (α : Type u) : Type u"}
 {"decl":"Option.all","refs":[[41,45,"Bool"],[49,55,"Option"],[60,64,"Bool"]],"text":"Option.all.{u_1} {α : Type u_1} (p : α → Bool) : Option α → Bool"}
 {"decl":"Option.bind","refs":[[55,61,"Option"],[71,77,"Option"],[83,89,"Option"]],"text":"Option.bind.{u_1, u_2} {α : Type u_1} {β : Type u_2} : Option α → (α → Option β) → Option β"}
@@ -1411,15 +1373,10 @@
 {"decl":"UInt8.instOfNat","refs":[[21,24,"Nat"],[28,33,"OfNat"],[34,39,"UInt8"]],"text":"UInt8.instOfNat {n : Nat} : OfNat UInt8 n"}
 {"decl":"UInt8.land","refs":[[18,23,"UInt8"],[27,32,"UInt8"]],"text":"UInt8.land (a b : UInt8) : UInt8"}
 {"decl":"UInt8.lt","refs":[[16,21,"UInt8"]],"text":"UInt8.lt (a b : UInt8) : Prop"}
-{"decl":"UInt8.lt_iff_toBitVec_lt","refs":[[32,37,"UInt8"],[43,44,"LT.lt"],[47,48,"Iff"],[51,59,"UInt8.toBitVec"],[60,61,"LT.lt"],[64,72,"UInt8.toBitVec"]],"text":"UInt8.lt_iff_toBitVec_lt {a b : UInt8} : a < b ↔ a.toBitVec < b.toBitVec"}
 {"decl":"UInt8.lt_iff_toNat_lt","refs":[[29,34,"UInt8"],[40,41,"LT.lt"],[44,45,"Iff"],[48,53,"UInt8.toNat"],[54,55,"LT.lt"],[58,63,"UInt8.toNat"]],"text":"UInt8.lt_iff_toNat_lt {a b : UInt8} : a < b ↔ a.toNat < b.toNat"}
 {"decl":"UInt8.neg","refs":[[15,20,"UInt8"],[24,29,"UInt8"]],"text":"UInt8.neg (a : UInt8) : UInt8"}
 {"decl":"UInt8.ofNat","refs":[[17,20,"Nat"],[24,29,"UInt8"]],"text":"UInt8.ofNat (n : Nat) : UInt8"}
-{"decl":"UInt8.toBitVec_and","refs":[[26,31,"UInt8"],[38,41,"HAnd.hAnd"],[45,53,"UInt8.toBitVec"],[54,55,"Eq"],[58,66,"UInt8.toBitVec"],[67,70,"HAnd.hAnd"],[73,81,"UInt8.toBitVec"]],"text":"UInt8.toBitVec_and (a b : UInt8) : (a &&& b).toBitVec = a.toBitVec &&& b.toBitVec"}
-{"decl":"UInt8.toBitVec_inj","refs":[[26,31,"UInt8"],[37,45,"UInt8.toBitVec"],[46,47,"Eq"],[50,58,"UInt8.toBitVec"],[59,60,"Iff"],[63,64,"Eq"]],"text":"UInt8.toBitVec_inj {a b : UInt8} : a.toBitVec = b.toBitVec ↔ a = b"}
-{"decl":"UInt8.toBitVec_ofNat","refs":[[26,29,"Nat"],[34,45,"OfNat.ofNat"],[49,57,"UInt8.toBitVec"],[58,59,"Eq"],[60,72,"BitVec.ofNat"]],"text":"UInt8.toBitVec_ofNat (n : Nat) : (OfNat.ofNat n).toBitVec = BitVec.ofNat 8 n"}
 {"decl":"UInt8.toNat","refs":[[17,22,"UInt8"],[26,29,"Nat"]],"text":"UInt8.toNat (n : UInt8) : Nat"}
-{"decl":"UInt8.toNat_toBitVec","refs":[[26,31,"UInt8"],[37,45,"UInt8.toBitVec"],[46,51,"BitVec.toNat"],[52,53,"Eq"],[56,61,"UInt8.toNat"]],"text":"UInt8.toNat_toBitVec (x : UInt8) : x.toBitVec.toNat = x.toNat"}
 {"decl":"UInt8.toNat_toUInt32","refs":[[26,31,"UInt8"],[37,45,"UInt8.toUInt32"],[46,51,"UInt32.toNat"],[52,53,"Eq"],[56,61,"UInt8.toNat"]],"text":"UInt8.toNat_toUInt32 (x : UInt8) : x.toUInt32.toNat = x.toNat"}
 {"decl":"UInt8.toUInt32","refs":[[20,25,"UInt8"],[29,35,"UInt32"]],"text":"UInt8.toUInt32 (a : UInt8) : UInt32"}
 {"decl":"UInt8.utf8ByteSize","refs":[[24,29,"UInt8"],[39,54,"UInt8.IsUTF8FirstByte"],[58,61,"Nat"]],"text":"UInt8.utf8ByteSize (c : UInt8) (_h : c.IsUTF8FirstByte) : Nat"}
@@ -1452,11 +1409,53 @@
 {"decl":"WellFounded.fixF","refs":[[134,137,"Acc"]],"text":"WellFounded.fixF.{u, v} {α : Sort u} {r : α → α → Prop} {C : α → Sort v}\n  (F : (x : α) → ((y : α) → r y x → C y) → C x) (x : α) (a : Acc r x) : C x"}
 {"decl":"WellFoundedRelation","refs":[],"text":"WellFoundedRelation.{u} (α : Sort u) : Sort (max 1 u)"}
 {"decl":"XorOp","refs":[],"text":"XorOp.{u} (α : Type u) : Type u"}
+{"decl":"_private.Init.Data.Array.Basic.0.Array.shrink.loop","refs":[[38,41,"Nat"],[44,49,"Array"],[54,59,"Array"]],"text":"Array.shrink.loop✝.{u} {α : Type u} : Nat → Array α → Array α"}
+{"decl":"_private.Init.Data.Array.Subarray.0.Subarray.findSomeRevM?.find","refs":[[88,93,"Monad"],[105,113,"Subarray"],[129,135,"Option"],[145,148,"Nat"],[154,155,"LE.le"],[156,170,"Std.Slice.size"],[179,185,"Option"]],"text":"Subarray.findSomeRevM?.find✝.{u, v, w} {α : Type u} {β : Type v} {m : Type v → Type w} [Monad m]\n  (as : Subarray α) (f : α → m (Option β)) (i : Nat) : i ≤ Std.Slice.size as → m (Option β)"}
+{"decl":"_private.Init.Data.Format.Basic.0.Std.Format.State","refs":[],"text":"Std.Format.State✝ : Type"}
+{"decl":"_private.Init.Data.Format.Basic.0.Std.Format.WorkGroup","refs":[],"text":"Std.Format.WorkGroup✝ : Type"}
+{"decl":"_private.Init.Data.Format.Basic.0.Std.Format.WorkItem","refs":[],"text":"Std.Format.WorkItem✝ : Type"}
+{"decl":"_private.Init.Data.Format.Basic.0.Std.Format.be","refs":[[38,41,"Nat"],[44,49,"Monad"],[54,82,"Std.Format.MonadPrettyFormat"],[90,94,"List"],[95,116,"_private.Init.Data.Format.Basic.0.Std.Format.WorkGroup"],[121,125,"Unit"]],"text":"Std.Format.be✝ {m : Type → Type} (w : Nat) [Monad m] [Std.Format.MonadPrettyFormat m] :\n  List Std.Format.WorkGroup✝ → m Unit"}
+{"decl":"_private.Init.Data.Format.Basic.0.Std.Format.instMonadPrettyFormatStateMState","refs":[[49,77,"Std.Format.MonadPrettyFormat"],[79,85,"StateM"],[86,103,"_private.Init.Data.Format.Basic.0.Std.Format.State"]],"text":"Std.Format.instMonadPrettyFormatStateMState✝ :\n  Std.Format.MonadPrettyFormat (StateM Std.Format.State✝)"}
+{"decl":"_private.Init.Data.Nat.Power2.Basic.0.Nat.nextPowerOfTwo.go","refs":[[34,37,"Nat"],[50,51,"GT.gt"],[57,60,"Nat"]],"text":"Nat.nextPowerOfTwo.go✝ (n power : Nat) (h : power > 0) : Nat"}
+{"decl":"_private.Init.Data.Range.Basic.0.Std.Legacy.Range.forIn'.loop","refs":[[83,88,"Monad"],[103,119,"Std.Legacy.Range"],[131,134,"Nat"],[140,141,"Membership.mem"],[157,166,"ForInStep"],[184,187,"Nat"],[200,201,"HSub.hSub"],[208,213,"Std.Legacy.Range.start"],[215,216,"HMod.hMod"],[223,227,"Std.Legacy.Range.step"],[228,229,"Eq"],[245,250,"Std.Legacy.Range.start"],[251,252,"LE.le"]],"text":"Std.Legacy.Range.forIn'.loop✝.{u_1, u_2} {m : Type u_1 → Type u_2} {β : Type u_1} [Monad m]\n  (range : Std.Legacy.Range) (f : (i : Nat) → i ∈ range → β → m (ForInStep β)) (b : β) (i : Nat)\n  (hs : (i - range.start) % range.step = 0) (hl : range.start ≤ i := by omega) : m β"}
+{"decl":"_private.Init.Data.String.Decode.0.ByteArray.utf8DecodeChar?.helper₅","refs":[[40,45,"UInt8"],[54,94,"ByteArray.utf8DecodeChar?.parseFirstByte"],[97,98,"Eq"],[99,139,"ByteArray.utf8DecodeChar?.FirstByte.done"],[147,148,"LT.lt"]],"text":"ByteArray.utf8DecodeChar?.helper₅✝ {w : UInt8}\n  (h : ByteArray.utf8DecodeChar?.parseFirstByte w = ByteArray.utf8DecodeChar?.FirstByte.done) :\n  w < 128"}
+{"decl":"_private.Init.Dynamic.0.DynamicPointed","refs":[[18,30,"NonemptyType"]],"text":"DynamicPointed✝ : NonemptyType"}
+{"decl":"_private.Init.Prelude.0.Lean.assembleParts","refs":[[22,26,"List"],[27,36,"Lean.Name"],[39,48,"Lean.Name"],[51,60,"Lean.Name"]],"text":"Lean.assembleParts✝ : List Lean.Name → Lean.Name → Lean.Name"}
+{"decl":"_private.Init.Prelude.0.Lean.extractImported","refs":[[30,34,"List"],[35,50,"Lean.MacroScope"],[66,75,"Lean.Name"],[81,90,"Lean.Name"],[93,97,"List"],[98,107,"Lean.Name"],[110,130,"Lean.MacroScopesView"]],"text":"Lean.extractImported✝ (scps : List Lean.MacroScope) (mainModule : Lean.Name) :\n  Lean.Name → List Lean.Name → Lean.MacroScopesView"}
+{"decl":"_private.Init.Prelude.0.Lean.extractMacroScopesAux","refs":[[30,39,"Lean.Name"],[42,46,"List"],[47,62,"Lean.MacroScope"],[65,85,"Lean.MacroScopesView"]],"text":"Lean.extractMacroScopesAux✝ : Lean.Name → List Lean.MacroScope → Lean.MacroScopesView"}
+{"decl":"_private.Init.Prelude.0.Lean.extractMainModule","refs":[[32,36,"List"],[37,52,"Lean.MacroScope"],[58,67,"Lean.Name"],[70,74,"List"],[75,84,"Lean.Name"],[87,107,"Lean.MacroScopesView"]],"text":"Lean.extractMainModule✝ (scps : List Lean.MacroScope) :\n  Lean.Name → List Lean.Name → Lean.MacroScopesView"}
+{"decl":"_private.Init.Prelude.0.isValidChar_UInt32","refs":[[25,28,"Nat"],[37,48,"Nat.isValidChar"],[54,55,"LT.lt"],[56,67,"UInt32.size"]],"text":"isValidChar_UInt32✝ {n : Nat} (h : n.isValidChar) : n < UInt32.size"}
+{"decl":"_private.Lean.Data.Position.0.Lean.FileMap.toPosition.loop","refs":[[38,50,"Lean.FileMap"],[59,73,"String.Pos.Raw"],[82,88,"String"],[98,103,"Array"],[104,118,"String.Pos.Raw"],[127,130,"Nat"],[134,147,"Lean.Position"]],"text":"Lean.FileMap.toPosition.loop✝ (fmap : Lean.FileMap) (pos : String.Pos.Raw) (str : String)\n  (ps : Array String.Pos.Raw) (b e : Nat) : Lean.Position"}
+{"decl":"_private.Lean.Data.PrefixTree.0.Lean.PrefixTreeNode.insert.loop","refs":[[89,97,"Ordering"],[113,132,"Lean.PrefixTreeNode"],[143,147,"List"],[152,171,"Lean.PrefixTreeNode"]],"text":"Lean.PrefixTreeNode.insert.loop✝.{u_1, u_2} {α : Type u_1} {β : Type u_2} (cmp : α → α → Ordering)\n  (val : β) : Lean.PrefixTreeNode α β cmp → List α → Lean.PrefixTreeNode α β cmp"}
+{"decl":"_private.Lean.Data.Trie.0.Lean.Data.Trie.matchPrefix.loop","refs":[[49,55,"String"],[68,71,"Nat"],[100,101,"LE.le"],[104,116,"String.utf8ByteSize"],[120,134,"Lean.Data.Trie"],[139,142,"Nat"],[145,151,"Option"],[156,162,"Option"]],"text":"Lean.Data.Trie.matchPrefix.loop✝ {α : Type} (s : String) (endByte : Nat)\n  (endByte_valid : endByte ≤ s.utf8ByteSize) : Lean.Data.Trie α → Nat → Option α → Option α"}
+{"decl":"_private.Lean.Environment.0.Lean.AsyncConst","refs":[],"text":"Lean.AsyncConst✝ : Type"}
+{"decl":"_private.Lean.Environment.0.Lean.AsyncConsts","refs":[],"text":"Lean.AsyncConsts✝ : Type"}
+{"decl":"_private.Lean.Environment.0.Lean.AsyncContext","refs":[],"text":"Lean.AsyncContext✝ : Type"}
+{"decl":"_private.Lean.Environment.0.Lean.RealizationContext","refs":[],"text":"Lean.RealizationContext✝ : Type"}
+{"decl":"_private.Lean.Environment.0.Lean.VisibilityMap","refs":[],"text":"Lean.VisibilityMap✝ (α : Type) : Type"}
+{"decl":"_private.Lean.Environment.0.Lean.instInhabitedAsyncConsts","refs":[[33,42,"Inhabited"],[43,60,"_private.Lean.Environment.0.Lean.AsyncConsts"]],"text":"Lean.instInhabitedAsyncConsts✝ : Inhabited Lean.AsyncConsts✝"}
+{"decl":"_private.Lean.Environment.0.Lean.instInhabitedVisibilityMap","refs":[[46,55,"Inhabited"],[62,71,"Inhabited"],[73,92,"_private.Lean.Environment.0.Lean.VisibilityMap"]],"text":"Lean.instInhabitedVisibilityMap✝ {a✝ : Type} [Inhabited a✝] : Inhabited (Lean.VisibilityMap✝ a✝)"}
+{"decl":"_private.Lean.Parser.Basic.0.Lean.Parser.addQuotDepth","refs":[[31,34,"Int"],[41,59,"Lean.Parser.Parser"],[63,81,"Lean.Parser.Parser"]],"text":"Lean.Parser.addQuotDepth✝ (i : Int) (p : Lean.Parser.Parser) : Lean.Parser.Parser"}
+{"decl":"_private.Lean.Parser.Basic.0.Lean.Parser.decimalNumberFn.parseOptDot","refs":[[46,71,"Lean.Parser.ParserContext"],[80,103,"Lean.Parser.ParserState"],[107,130,"Lean.Parser.ParserState"],[131,132,"Prod"],[133,137,"Bool"]],"text":"Lean.Parser.decimalNumberFn.parseOptDot✝ (c : Lean.Parser.ParserContext)\n  (s : Lean.Parser.ParserState) : Lean.Parser.ParserState × Bool"}
+{"decl":"_private.Lean.Parser.Basic.0.Lean.Parser.decimalNumberFn.parseOptExp","refs":[[53,67,"String.Pos.Raw"],[74,99,"Lean.Parser.ParserContext"],[108,131,"Lean.Parser.ParserState"],[147,151,"Bool"],[155,178,"Lean.Parser.ParserState"]],"text":"Lean.Parser.decimalNumberFn.parseOptExp✝ (startPos : String.Pos.Raw) (c : Lean.Parser.ParserContext)\n  (s : Lean.Parser.ParserState) (hasBareDot : Bool) : Lean.Parser.ParserState"}
+{"decl":"_private.Lean.Parser.Basic.0.Lean.Parser.decimalNumberFn.parseScientific","refs":[[57,71,"String.Pos.Raw"],[94,98,"Bool"],[107,132,"Lean.Parser.ParserContext"],[139,162,"Lean.Parser.ParserState"],[166,189,"Lean.Parser.ParserState"]],"text":"Lean.Parser.decimalNumberFn.parseScientific✝ (startPos : String.Pos.Raw) (includeWhitespace : Bool)\n  (c : Lean.Parser.ParserContext) (s : Lean.Parser.ParserState) : Lean.Parser.ParserState"}
+{"decl":"_private.Lean.Parser.Basic.0.Lean.Parser.identFnAux.parse","refs":[[42,56,"String.Pos.Raw"],[64,70,"Option"],[71,88,"Lean.Parser.Token"],[113,117,"Bool"],[124,133,"Lean.Name"],[140,165,"Lean.Parser.ParserContext"],[174,197,"Lean.Parser.ParserState"],[201,224,"Lean.Parser.ParserState"]],"text":"Lean.Parser.identFnAux.parse✝ (startPos : String.Pos.Raw) (tk : Option Lean.Parser.Token)\n  (includeWhitespace : Bool) (r : Lean.Name) (c : Lean.Parser.ParserContext)\n  (s : Lean.Parser.ParserState) : Lean.Parser.ParserState"}
+{"decl":"_private.Lean.Parser.Basic.0.Lean.Parser.isHexDigit","refs":[[29,33,"Char"],[37,41,"Bool"]],"text":"Lean.Parser.isHexDigit✝ (c : Char) : Bool"}
+{"decl":"_private.Lean.Parser.Basic.0.Lean.Parser.isIdFirstOrBeginEscape","refs":[[41,45,"Char"],[49,53,"Bool"]],"text":"Lean.Parser.isIdFirstOrBeginEscape✝ (c : Char) : Bool"}
+{"decl":"_private.Lean.Parser.Basic.0.Lean.Parser.nameLitAux","refs":[[36,50,"String.Pos.Raw"],[54,74,"Lean.Parser.ParserFn"]],"text":"Lean.Parser.nameLitAux✝ (startPos : String.Pos.Raw) : Lean.Parser.ParserFn"}
+{"decl":"_private.Lean.Parser.Basic.0.Lean.Parser.pickNonNone","refs":[[34,57,"Lean.Parser.SyntaxStack"],[61,72,"Lean.Syntax"]],"text":"Lean.Parser.pickNonNone✝ (stack : Lean.Parser.SyntaxStack) : Lean.Syntax"}
+{"decl":"_private.Lean.Parser.Basic.0.Lean.Parser.rawStrLitFnAux.initState","refs":[[50,64,"String.Pos.Raw"],[73,76,"Nat"],[82,107,"Lean.Parser.ParserContext"],[110,133,"Lean.Parser.ParserState"],[136,159,"Lean.Parser.ParserState"]],"text":"Lean.Parser.rawStrLitFnAux.initState✝ (startPos : String.Pos.Raw) (num : Nat) :\n  Lean.Parser.ParserContext → Lean.Parser.ParserState → Lean.Parser.ParserState"}
+{"decl":"_private.Lean.Parser.Basic.0.Lean.Parser.tokenFnAux","refs":[[26,46,"Lean.Parser.ParserFn"]],"text":"Lean.Parser.tokenFnAux✝ : Lean.Parser.ParserFn"}
+{"decl":"_private.Lean.Parser.Basic.0.Lean.Parser.updateTokenCache","refs":[[42,56,"String.Pos.Raw"],[63,86,"Lean.Parser.ParserState"],[92,115,"Lean.Parser.ParserState"]],"text":"Lean.Parser.updateTokenCache✝ (startPos : String.Pos.Raw) (s : Lean.Parser.ParserState) :\n  Lean.Parser.ParserState"}
+{"decl":"_private.Lean.Parser.Basic.0.Lean.Parser.withAntiquotSuffixSpliceFn","refs":[[48,67,"Lean.SyntaxNodeKind"],[81,101,"Lean.Parser.ParserFn"],[105,125,"Lean.Parser.ParserFn"]],"text":"Lean.Parser.withAntiquotSuffixSpliceFn✝ (kind : Lean.SyntaxNodeKind)\n  (suffix : Lean.Parser.ParserFn) : Lean.Parser.ParserFn"}
+{"decl":"_private.Lean.Parser.Types.0.Lean.Parser.withStackDrop","refs":[[35,38,"Nat"],[45,65,"Lean.Parser.ParserFn"],[69,89,"Lean.Parser.ParserFn"]],"text":"Lean.Parser.withStackDrop✝ (drop : Nat) (p : Lean.Parser.ParserFn) : Lean.Parser.ParserFn"}
+{"decl":"_private.Std.Data.DHashMap.Internal.AssocList.Basic.0.Std.DHashMap.Internal.AssocList.filter.go","refs":[[103,107,"Bool"],[116,147,"Std.DHashMap.Internal.AssocList"],[157,188,"Std.DHashMap.Internal.AssocList"],[195,226,"Std.DHashMap.Internal.AssocList"]],"text":"Std.DHashMap.Internal.AssocList.filter.go✝.{v, u} {α : Type u} {β : α → Type v}\n  (f : (a : α) → β a → Bool) (acc : Std.DHashMap.Internal.AssocList α β) :\n  Std.DHashMap.Internal.AssocList α β → Std.DHashMap.Internal.AssocList α β"}
+{"decl":"_private.Std.Data.DHashMap.Internal.Defs.0.Std.DHashMap.Internal.Raw₀.expand.go","refs":[[76,84,"Hashable"],[93,96,"Nat"],[110,115,"Array"],[117,148,"Std.DHashMap.Internal.AssocList"],[169,171,"Subtype"],[174,175,"LT.lt"],[178,182,"Array.size"],[194,196,"Subtype"],[199,200,"LT.lt"],[203,207,"Array.size"]],"text":"Std.DHashMap.Internal.Raw₀.expand.go✝.{u, v} {α : Type u} {β : α → Type v} [Hashable α] (i : Nat)\n  (source : Array (Std.DHashMap.Internal.AssocList α β)) (target : { d // 0 < d.size }) :\n  { d // 0 < d.size }"}
+{"decl":"_private.Std.Data.DHashMap.Internal.Defs.0.Std.DHashMap.Internal.numBucketsForCapacity","refs":[[57,60,"Nat"],[64,67,"Nat"]],"text":"Std.DHashMap.Internal.numBucketsForCapacity✝ (capacity : Nat) : Nat"}
 {"decl":"absurd","refs":[[50,51,"Not"]],"text":"absurd.{v} {a : Prop} {b : Sort v} (h₁ : a) (h₂ : ¬a) : b"}
 {"decl":"and_self","refs":[[25,26,"And"],[30,31,"Eq"]],"text":"and_self (p : Prop) : (p ∧ p) = p"}
 {"decl":"and_true","refs":[[25,26,"And"],[27,31,"True"],[33,34,"Eq"]],"text":"and_true (p : Prop) : (p ∧ True) = p"}
 {"decl":"autoParam","refs":[[37,48,"Lean.Syntax"]],"text":"autoParam.{u} (α : Sort u) (tactic : Lean.Syntax) : Sort u"}
-{"decl":"beq_iff_eq","refs":[[33,36,"BEq"],[41,50,"LawfulBEq"],[69,71,"BEq.beq"],[75,76,"Eq"],[77,81,"Bool.true"],[82,83,"Iff"],[86,87,"Eq"]],"text":"beq_iff_eq.{u_1} {α : Type u_1} [BEq α] [LawfulBEq α] {a b : α} : (a == b) = true ↔ a = b"}
 {"decl":"beq_self_eq_true","refs":[[39,42,"BEq"],[47,54,"ReflBEq"],[71,73,"BEq.beq"],[77,78,"Eq"],[79,83,"Bool.true"]],"text":"beq_self_eq_true.{u_1} {α : Type u_1} [BEq α] [ReflBEq α] (a : α) : (a == a) = true"}
 {"decl":"bne","refs":[[22,25,"BEq"],[41,45,"Bool"]],"text":"bne.{u} {α : Type u} [BEq α] (a b : α) : Bool"}
 {"decl":"cast","refs":[[31,32,"Eq"]],"text":"cast.{u} {α β : Sort u} (h : α = β) (a : α) : β"}
@@ -1475,7 +1474,6 @@
 {"decl":"dite","refs":[[38,47,"Decidable"],[68,69,"Not"]],"text":"dite.{u} {α : Sort u} (c : Prop) [h : Decidable c] (t : c → α) (e : ¬c → α) : α"}
 {"decl":"eagerReduce","refs":[],"text":"eagerReduce.{u} {α : Sort u} (a : α) : α"}
 {"decl":"eq_false","refs":[[25,26,"Not"],[33,34,"Eq"],[35,40,"False"]],"text":"eq_false {p : Prop} (h : ¬p) : p = False"}
-{"decl":"eq_false'","refs":[[30,35,"False"],[41,42,"Eq"],[43,48,"False"]],"text":"eq_false' {p : Prop} (h : p → False) : p = False"}
 {"decl":"eq_of_heq","refs":[[45,46,"HEq"],[55,56,"Eq"]],"text":"eq_of_heq.{u} {α : Sort u} {a a' : α} (h : a ≍ a') : a = a'"}
 {"decl":"eq_self","refs":[[42,43,"Eq"],[47,48,"Eq"],[49,53,"True"]],"text":"eq_self.{u_1} {α : Sort u_1} (a : α) : (a = a) = True"}
 {"decl":"eq_true","refs":[[31,32,"Eq"],[33,37,"True"]],"text":"eq_true {p : Prop} (h : p) : p = True"}
@@ -1485,7 +1483,6 @@
 {"decl":"gt_iff_lt","refs":[[32,34,"LT"],[52,53,"GT.gt"],[56,57,"Iff"],[60,61,"LT.lt"]],"text":"gt_iff_lt.{u_1} {α : Type u_1} [LT α] {x y : α} : x > y ↔ y < x"}
 {"decl":"heq_of_eq","refs":[[51,52,"Eq"],[61,62,"HEq"]],"text":"heq_of_eq.{u_1} {α✝ : Sort u_1} {a a' : α✝} (h : a = a') : a ≍ a'"}
 {"decl":"id","refs":[],"text":"id.{u} {α : Sort u} (a : α) : α"}
-{"decl":"iff_self","refs":[[25,26,"Iff"],[30,31,"Eq"],[32,36,"True"]],"text":"iff_self (p : Prop) : (p ↔ p) = True"}
 {"decl":"implies_congr","refs":[[64,65,"Eq"],[79,80,"Eq"],[99,100,"Eq"]],"text":"implies_congr.{u, v} {p₁ p₂ : Sort u} {q₁ q₂ : Sort v} (h₁ : p₁ = p₂) (h₂ : q₁ = q₂) :\n  (p₁ → q₁) = (p₂ → q₂)"}
 {"decl":"inferInstance","refs":[],"text":"inferInstance.{u} {α : Sort u} [i : α] : α"}
 {"decl":"instAddNat","refs":[[13,16,"Add"],[17,20,"Nat"]],"text":"instAddNat : Add Nat"}
@@ -1538,7 +1535,6 @@
 {"decl":"instLTUInt32","refs":[[15,17,"LT"],[18,24,"UInt32"]],"text":"instLTUInt32 : LT UInt32"}
 {"decl":"instLTUInt64","refs":[[15,17,"LT"],[18,24,"UInt64"]],"text":"instLTUInt64 : LT UInt64"}
 {"decl":"instLTUInt8","refs":[[14,16,"LT"],[17,22,"UInt8"]],"text":"instLTUInt8 : LT UInt8"}
-{"decl":"instLawfulBEq","refs":[[36,47,"DecidableEq"],[53,62,"LawfulBEq"]],"text":"instLawfulBEq.{u_1} {α : Type u_1} [DecidableEq α] : LawfulBEq α"}
 {"decl":"instLawfulBEqString","refs":[[22,31,"LawfulBEq"],[32,38,"String"]],"text":"instLawfulBEqString : LawfulBEq String"}
 {"decl":"instMinNat","refs":[[13,16,"Min"],[17,20,"Nat"]],"text":"instMinNat : Min Nat"}
 {"decl":"instMonadStateOfMonadStateOf","refs":[[72,84,"MonadStateOf"],[94,104,"MonadState"]],"text":"instMonadStateOfMonadStateOf.{u, v} (σ : Type u) (m : Type u → Type v) [MonadStateOf σ m] :\n  MonadState σ m"}
