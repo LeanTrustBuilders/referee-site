@@ -31,6 +31,17 @@ A, B = Dataset.load(V / "fixture-a"), Dataset.load(V / "fixture-b")
 F = "Fixture."
 
 
+
+class LegacyLedgerTests(unittest.TestCase):
+    def test_a_history_recorded_before_ltb_dataset_1_carries_over(self):
+        from trust_site import ledger as ledger_mod
+        a = Dataset.load(V / "fixture-a")
+        # The history as a site built from ltb-dataset/0 datasets left it: the old meaning hashes.
+        led = {"builds": [{"commit": "before", "date": "", "label": "before"}],
+               "decls": {d.name: [[0, d.legacy_meaning]] for d in a.decls if d.is_project and d.legacy_meaning}}
+        self.assertTrue(ledger_mod.record(led, a))
+        self.assertTrue(all(len(h) == 1 and h[0][1] == a.by_name[n].meaning for n, h in led["decls"].items()))
+
 class ClaimsTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

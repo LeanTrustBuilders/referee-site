@@ -21,9 +21,17 @@ const AUDIT_KEY = () => `trust-site:${S.repo}:${S.root}`;
 let audit = {decls: {}, exported: null};
 function loadAudit() { try { audit = JSON.parse(localStorage.getItem(AUDIT_KEY())) || audit; } catch (e) { } audit.decls ||= {}; }
 function saveAudit() { try { localStorage.setItem(AUDIT_KEY(), JSON.stringify(audit)); } catch (e) { } }
+/* A verdict made before the site's datasets moved to ltb-dataset/1 holds the old meaning hash, which
+   the rows still carry: the verdict is moved to the new hash, as the old one would have said. */
+function upgradeVerdict(a, row) {
+  if (a && row && row[R.LEGACY] && a.meaning === row[R.LEGACY] && a.meaning !== row[R.MEANING]) {
+    a.meaning = row[R.MEANING]; saveAudit();
+  }
+}
 function verdictOf(name) {
   const a = audit.decls[name]; const row = byName.get(name);
   if (!a || !a.verdict) return {verdict: null, stale: false};
+  upgradeVerdict(a, row);
   return {verdict: a.verdict, note: a.note, stale: !!row && a.meaning !== row[R.MEANING], at: a.at};
 }
 function setVerdict(name, verdict, note) {
@@ -91,6 +99,7 @@ async function exportRecords() {
     const subject = {name: d.name, module: d.module, package: d.package, commit: S.subject.commit, toolchain: S.subject.toolchain,
       hasher: {name: S.subject.hasher.name, revision: S.subject.hasher.revision, local: S.subject.hasher.local}, hashes,
       kind: d.kind === 'Instance' ? 'instance' : (d.isProp ? 'statement' : 'definition')};
+    upgradeVerdict(a, byName.get(name));
     if (a.meaning !== d.hashes.meaning) continue;   // made on another version: kept locally, not exported as current
     const rec = {schema: 'ltb-evidence/0', kind: 'review', subject, verdict: a.verdict === 'accepted' ? 'accept' : 'question',
       by: {kind: 'person', identity: {kind: 'github', id: login}}, at: a.at, origin: {kind: 'site', ref: location.href.split('#')[0]}};

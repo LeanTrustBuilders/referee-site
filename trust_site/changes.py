@@ -86,6 +86,9 @@ def compare(new: Dataset, old: Dataset, scope_names: set[str] | None = None) -> 
         "current": {"commit": new.commit, "decls": sum(1 for d in new.decls if d.is_project)},
         "counts": {k: len(v) for k, v in lists.items()},
         "lists": {k: sorted(v) for k, v in lists.items()},
-        "comparable": all(old.hasher.get(k) == new.hasher.get(k) for k in ("name", "revision", "local")),
+        # The same hasher, or a baseline of ltb-dataset/0 against a dataset that carries its hashes
+        # as `legacy`, which `classify` then compares with.
+        "comparable": any(all(old.hasher.get(k) == h.get(k) for k in ("name", "revision", "local"))
+                          for h in (new.hasher, new.legacy_hasher)),
     }
     return ch
