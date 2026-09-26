@@ -44,12 +44,20 @@ On alpha-rar, 6 claims give a site of 53 declarations out of 815, as Referee's d
 Verdicts (accepted, query, with a note) live in the reader's browser, keyed by each declaration's
 meaning hash, so a verdict on a declaration that has changed since reads "accepted, then changed".
 **Export** writes them as [S3](https://github.com/LeanTrustBuilders/specs) review records under the
-reader's GitHub account (records are never anonymous), which
-[evidence-core](https://github.com/LeanTrustBuilders/evidence-core) reads and an
-[evidence store](https://github.com/LeanTrustBuilders/evidence-store) accepts by pull request from
-that account; **Import** reads them back. `--evidence` shows published records (a store's directory,
-or a JSONL file) on each declaration's page, with their status against this build, and coverage can
-count them.
+reader's GitHub account (records are never anonymous), each keyed by the declaration's S1 key as
+evidence-core wrote it into the site; `evidence-store add FILE`, in a checkout of an
+[evidence store](https://github.com/LeanTrustBuilders/evidence-store), checks them, gives them their
+ids and adds them, for a pull request from that account. **Import** reads them back. `--evidence`
+shows published records (a store's directory, or a JSONL file) on each declaration's page, with
+their status against this build, withdrawn and superseded ones marked, and coverage can count them.
+
+**What is computed where.** This package lays pages out; what they say is computed by the suite's
+tools: [evidence-core](https://github.com/LeanTrustBuilders/evidence-core) resolves records against
+the dataset (statuses, states, threads, coverage under every policy), finds the claims, compares
+datasets (Changes), keeps the provenance ledger, reads source text, and analyses the dataset
+(closures, `sorry`, specifications and characterizations, the claims-only scope, trusted packages);
+[evidence-store](https://github.com/LeanTrustBuilders/evidence-store) names the issue forms the pages
+link to.
 
 ## How it differs from Referee
 
@@ -86,8 +94,9 @@ who (a GitHub account, or an AI agent and the account it acted through), what th
 which failure modes they checked, caveats, the replies, and what happened since (withdrawn,
 superseded by the same reviewer, a problem fixed in a commit, a question answered). A review of an
 earlier version says so, and with `--at` datasets of earlier commits, what changed underneath it.
-Coverage is computed in the page under the reader's policy (count AI agents? reviews made before a
-change underneath? acceptances with caveats? authors' own?), with what is left to review next, the
+Coverage follows the reader's policy (count AI agents? reviews made before a change underneath?
+acceptances with caveats? authors' own?): evidence-core decides where each declaration stands under
+every policy when the page is built, and the page shows the one chosen, with what is left to review next, the
 failure modes nobody checked, disagreements, the activity and the reviewers. Every "Review", "Report
 a problem" and "Ask a question" opens the store's issue form, prefilled. The whole site, scoped to the
 claim, is kept beside it as `site.html`.
@@ -121,7 +130,7 @@ then carries it, so that a certificate issued with trust matches the declaration
 
 ## Provenance
 
-`trust-site ledger --ledger FILE --dataset DIR --date D --label L` records a build; `build --ledger
+`evidence-core ledger --ledger FILE --dataset DIR --date D --label L` records a build; `build --ledger
 FILE` then says, on each page, when the declaration's meaning last changed ("Meaning last changed
 in v4.35.0-rc2-1-g61e506b (2026-09-22), the 2nd recorded change"), and Changes lets a reader pick
 the build they last worked through. A deployment keeps the ledger from one build to the next.

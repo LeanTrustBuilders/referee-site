@@ -35,33 +35,16 @@ const POLICY_TEXT = [
 /* ---------- reading the records ---------- */
 const reviewsOf = n => E.records.filter(r => r.decl === n && r.kind === 'review');
 const repliesOf = r => (r.replies || []).map(id => recs.get(id)).filter(Boolean);
-const inForce = r => !r.supersededBy && r.state !== 'withdrawn';
-function counts(r) {
-  if (r.verdict !== 'accept' || !inForce(r)) return false;
-  if (!(r.applies || (policy.staleUnderneath && r.status === 'stale-underneath'))) return false;
-  if (r.by.kind === 'agent' && !policy.agents) return false;
-  if (r.by.involvement === 'author' && !policy.authors) return false;
-  if (r.caveats.length && !policy.caveats) return false;
-  return true;
-}
+// What evidence-core decided (data/evidence.json): whether a record is in force, and where each
+// declaration stands under every policy; the page looks up the reader's.
+const inForce = r => r.inForce;
+const policyKey = () => E.policy.switches.map(k => policy[k === 'stale_underneath' ? 'staleUnderneath' : k] ? '1' : '0').join('');
 const openProblems = n => reviewsOf(n).filter(r => r.verdict === 'problem' && !r.supersededBy && r.state === 'open');
 const openQuestions = n => reviewsOf(n).filter(r => r.verdict === 'question' && r.state === 'open');
-function declState(n) {
-  const rs = reviewsOf(n);
-  if (openProblems(n).length) return rs.some(r => r.verdict === 'accept' && inForce(r) && r.applies) ? 'disputed' : 'problem';
-  if (rs.some(counts)) return 'covered';
-  const accepts = rs.filter(r => r.verdict === 'accept' && inForce(r));
-  if (accepts.some(r => r.applies)) return 'uncounted';   // reviewed, but the policy counts none of them
-  if (accepts.length) return 'stale';
-  return 'unreviewed';
-}
-// Why a declaration's current acceptances do not count, in the reader's words.
-function whyUncounted(n) {
-  const live = reviewsOf(n).filter(r => r.verdict === 'accept' && inForce(r) && r.applies);
-  if (live.every(r => r.by.kind === 'agent') && !policy.agents) return 'reviewed only by AI agents, which your policy does not count';
-  if (live.every(r => r.by.involvement === 'author') && !policy.authors) return "reviewed only by its authors, which your policy does not count";
-  return 'reviewed, but your policy counts none of its reviews';
-}
+const declState = n => E.policy.states[policyKey()][n] || 'unreviewed';
+const WHY = {agents: 'reviewed only by AI agents, which your policy does not count',
+  authors: 'reviewed only by its authors, which your policy does not count', policy: 'reviewed, but your policy counts none of its reviews'};
+const whyUncounted = n => WHY[E.policy.why[policyKey()][n]] || WHY.policy;
 const STATE_CHIP = {covered: ['good', 'reviewed'], problem: ['bad', 'open problem'], disputed: ['bad', 'disputed'],
   uncounted: ['plain', 'not counted under your policy'], stale: ['warn', 'reviews out of date'], unreviewed: ['plain', 'not yet reviewed']};
 function members() { return policy.upstream ? [...E.order, ...E.upstream] : E.order; }
@@ -94,11 +77,8 @@ const ACTION = {withdraw: ['Withdraw', 'Take it back: only its author can'], fix
   intended: ['Intended', 'The behaviour is deliberate: its reporter or a maintainer'], invalid: ['Not a problem', 'Its reporter or a maintainer'],
   answered: ['Mark answered', 'Its asker or a maintainer'], reopen: ['Reopen', 'Its author or a maintainer']};
 function statusActions(r) {
-  if (!E.forms || !E.forms.status || r.supersededBy || r.state === 'withdrawn') return '';
-  const acts = r.verdict === 'accept' ? ['withdraw']
-    : r.state === 'open' ? (r.verdict === 'problem' ? ['fixed', 'intended', 'invalid', 'withdraw'] : ['answered', 'withdraw'])
-    : ['reopen'];
-  return acts.map(a => `<a class="act" target="_blank" rel="noopener" title="${esc(ACTION[a][1])}" href="${formUrl('status', r.decl,
+  if (!E.forms || !E.forms.status) return '';
+  return (r.actions || []).filter(a => ACTION[a]).map(a => `<a class="act" target="_blank" rel="noopener" title="${esc(ACTION[a][1])}" href="${formUrl('status', r.decl,
     {record: r.id, action: a}, `Status: ${a} ${r.verdict === 'accept' ? 'review' : r.verdict} ${r.id} of ${r.decl}`)}">${ACTION[a][0]}</a>`).join('');
 }
 function actions(n) {

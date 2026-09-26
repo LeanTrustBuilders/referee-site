@@ -1,8 +1,10 @@
 """Build the site: read a dataset (S2), evidence (S3) and the source checkout; write the page shell,
 its assets, and the JSON the pages are rendered from.
 
-Everything that needs judgement about the library is decided here, once, and written down; the
-browser only renders and keeps the reader's own audit. The output is:
+Everything that needs judgement about the library is decided by the suite's tools, and written
+down here once: statuses, claims, changes, provenance, closures, `sorry`, specifications and source
+text come from evidence-core; this module lays them out for the page. The browser only renders and
+keeps the reader's own audit. The output is:
 
 * ``index.html`` and ``assets/`` — one page that renders every view (declarations are addressed as
   ``#/d/<name>``), so that a library of 80,000 declarations is a few files, not 80,000 pages;
@@ -22,16 +24,17 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from evidence_core import Dataset, Evidence, classify
+from evidence_core import Dataset, Evidence
+from evidence_core import analysis
+from evidence_core import claims as claims_mod
+from evidence_core import ledger as ledger_mod
 from evidence_core import records as evrec
-
-from . import claims as claims_mod
-from . import ledger as ledger_mod
-from .changes import compare
-from .source import Sources, split_statement
+from evidence_core.changes import compare
+from evidence_core.source import Sources, split_statement
+from evidence_core.store import Store
+from evidence_core.views import views_on
 
 STATIC = Path(__file__).parent / "static"
-ORDINARY_AXIOMS = {"propext", "Classical.choice", "Quot.sound"}
 
 
 @dataclass
@@ -106,12 +109,12 @@ def build(opt: Options) -> dict:
     commit = ds.commit
 
     meaning = ds.edges("meaning")
-    term = ds.edges("term") if "term" in ds.notions() else {}
     ann = {a: ds.annotations(a) for a in ("claim", "specifies", "characterization", "example_of", "nonexample_of")}
 
     # --- claims and scope -------------------------------------------------------------------
+    store = Store.load(opt.evidence) if opt.evidence and Path(opt.evidence).is_dir() else None
     cl = claims_mod.resolve(opt.source, names, explicit=opt.claim or None, comparator_dir=opt.comparator,
-                            annotations=ann["claim"])
+                            annotations=ann["claim"], store_claims=(store.config.get("claims") if store else None))
     mode = "only" if opt.only else ("claims" if opt.claims_only else "full")
     if mode != "full":
         seeds = opt.only if opt.only else cl.names
@@ -120,7 +123,7 @@ def build(opt: Options) -> dict:
             raise SystemExit(f"cannot scope the site: {', '.join(missing)} not in the library")
         if not seeds:
             raise SystemExit("--claims-only: the project names no claims, so the scoped site would be empty")
-        scope_ids, pulled = scoped(ds, [ds.by_name[s].id for s in seeds], meaning, ann)
+        scope_ids, pulled = analysis.claim_scope(ds, seeds)
     else:
         scope_ids, pulled = {d.id for d in project}, set()
     scope = [d for d in project if d.id in scope_ids]
@@ -149,38 +152,12 @@ def build(opt: Options) -> dict:
     # --- per declaration -----------------------------------------------------------------------
     source_rows = ds.facet("source")
     keyword = {n: rows[0].get("keyword") for n, rows in source_rows.items()}
-    axioms = {n: rows[0] for n, rows in ds.facet("axioms").items()}
     statements = {n: rows[0] for n, rows in ds.facet("statement").items()}
     docs = {n: rows[0].get("text", "") for n, rows in ds.facet("docstring").items()}
 
-    # Closures under `meaning`: project declarations and external constants a statement rests on.
-    closure_cache: dict[int, tuple[frozenset, frozenset]] = {}
-
-    def closure(i: int) -> tuple[frozenset, frozenset]:
-        if i in closure_cache:
-            return closure_cache[i]
-        seen, stack, proj, ext = {i}, [i], set(), set()
-        while stack:
-            x = stack.pop()
-            for t in meaning.get(x, ()):
-                if t in seen:
-                    continue
-                seen.add(t)
-                if by_id[t].is_project:
-                    proj.add(t)
-                    stack.append(t)
-                else:
-                    ext.add(t)
-        closure_cache[i] = (frozenset(proj), frozenset(ext))
-        return closure_cache[i]
-
-    # Sorry: whether the declaration depends on one (axioms facet, transitive), and whether it is its
-    # own (none of its project term dependencies does) or inherited.
-    def has_sorry(name: str) -> bool:
-        return bool(axioms.get(name, {}).get("sorry"))
-
-    def sorry_deps(d) -> list[int]:
-        return [t for t in term.get(d.id, meaning.get(d.id, ())) if by_id[t].is_project and has_sorry(by_id[t].name)]
+    # What each declaration rests on, its `sorry`, and what specifies or characterizes it.
+    closure = analysis.Closures(ds).of
+    sorry = {d.name: analysis.sorry_of(ds, d.name) for d in scope}
 
     users: dict[int, list[int]] = defaultdict(list)
     for s, ts in meaning.items():
@@ -189,35 +166,13 @@ def build(opt: Options) -> dict:
                 if t in scope_set:
                     users[t].append(s)
 
-    # Specifications: what specifies each definition, and what each theorem specifies.
-    spec_of: dict[str, list[dict]] = defaultdict(list)       # definition → specifying theorems
-    for thm, payloads in ann["specifies"].items():
-        for p in payloads:
-            spec_of[p.get("target", "")].append({"decl": thm, "comment": p.get("comment", ""), "kind": "specifies"})
-    for kind in ("example_of", "nonexample_of"):
-        for thm, payloads in ann[kind].items():
-            for p in payloads:
-                spec_of[p.get("target", "")].append({"decl": thm, "comment": "", "kind": kind.replace("_of", "")})
-    chars: dict[str, list[dict]] = defaultdict(list)          # definition → characterizations
-    by_prop: dict[tuple, dict] = {}
-    for decl, payloads in ann["characterization"].items():
-        for p in payloads:
-            key = (p.get("property"), p.get("target"))
-            c = by_prop.setdefault(key, {"property": p.get("property"), "target": p.get("target"),
-                                         "comment": "", "existence": [], "uniqueness": []})
-            if p.get("role") == "property":
-                c["comment"] = p.get("comment", "")
-            elif p.get("role") == "existence":
-                c["existence"].append(decl)
-            elif p.get("role") == "uniqueness":
-                c["uniqueness"].append({"decl": decl, "relation": p.get("relation", "")})
-    for (_, target), c in by_prop.items():
-        chars[target].append(c)
+    spec_of = analysis.specifications(ds)          # definition → the theorems about it
+    chars = analysis.characterizations(ds)          # definition → its characterizations
 
     # Changes against a baseline, and published evidence.
     base = Dataset.load(opt.baseline) if opt.baseline else None
     changes = compare(ds, base, scope_names={d.name for d in scope}) if base else None
-    reviews = load_evidence(opt.evidence, ds, base)
+    reviews = load_evidence(opt.evidence, ds, base, store)
 
     claim_by_decl = {c.decl: c for c in cl.claims if c.found}
     led = ledger_mod.load(opt.ledger)
@@ -230,29 +185,26 @@ def build(opt: Options) -> dict:
         proj, ext = closure(d.id)
         kw = keyword.get(d.name)
         label = kind_label(d, kw)
-        ax = axioms.get(d.name, {})
-        extra_axioms = [a for a in ax.get("axioms", []) if a not in ORDINARY_AXIOMS and a != "sorryAx"]
-        sorry = has_sorry(d.name)
-        own_sorry = sorry and not sorry_deps(d)
+        so = sorry[d.name]
         change = changes.status.get(d.name) if changes else None
         doc = docs.get(d.name, "")
         rows.append([d.id, d.name, label, mod_index.get(d.module, -1), len(proj), len(ext),
-                     2 if own_sorry else (1 if sorry else 0), change or "", d.meaning or "",
+                     2 if so.own else (1 if so.uses else 0), change or "", d.meaning or "",
                      doc_summary(doc), kw or "",
-                     sum(1 for r in reviews.get(d.name, []) if r["verdict"] == "accept" and r["status"] in ("current", "renamed")),
+                     sum(1 for r in reviews.get(d.name, []) if r["verdict"] == "accept" and r["inForce"] and r["applies"]),
                      hist[d.name][-1][0] if d.name in hist else -1, hist[d.name][0][0] if d.name in hist else -1,
                      # ltb-dataset/1: the meaning hash of ltb-dataset/0, which audits made before hold.
                      d.legacy_meaning or ""])
-        text = None
         srow = source_rows.get(d.name, [None])[0]
-        if srow:
-            text = src.text(srow)
+        text = src.text(srow) if srow else None
         code, proof = split_statement(text) if text else ("", "")
         if d.is_prop is False:  # a definition's body is part of what it says
             code, proof = (text or "", "")
         entry = {
             "id": d.id, "name": d.name, "kind": label, "keyword": kw, "module": d.module,
             "package": d.package, "isProp": d.is_prop, "hashes": {"meaning": d.meaning, "local": d.local, "content": d.content},
+            # The S1 key a review of it names, which the reader's audit exports.
+            "subject": evrec.subject_from_decl(d, ds),
             "doc": doc, "statement": statements.get(d.name), "code": code, "proof": proof.strip(),
             "source": ({"path": srow["path"], "start": srow["start"][0], "end": srow["end"][0],
                         "url": f"https://github.com/{repo}/blob/{commit}/{srow['path']}#L{srow['start'][0]}-L{srow['end'][0]}" if repo and commit else ""}
@@ -261,9 +213,8 @@ def build(opt: Options) -> dict:
             "outside": sorted(by_id[t].name for t in meaning.get(d.id, ()) if by_id[t].is_project and t not in scope_set),
             "external": sorted([by_id[t].name, upstream_pkg.get(t, ""), by_id[t].kind] for t in ext),
             "users": sorted(users.get(d.id, [])),
-            "sorry": sorry, "ownSorry": own_sorry,
-            "sorryVia": [by_id[t].name for t in sorry_deps(d)] if sorry and not own_sorry else [],
-            "axioms": extra_axioms,
+            "sorry": so.uses, "ownSorry": so.own, "sorryVia": list(so.via) if so.uses and not so.own else [],
+            "axioms": analysis.extra_axioms(ds, d.name),
             "change": changes.detail.get(d.name) if changes else None,
             "reviews": reviews.get(d.name, []),
             "claim": claim_by_decl[d.name].as_json() if d.name in claim_by_decl else None,
@@ -310,7 +261,7 @@ def build(opt: Options) -> dict:
 
     # --- packages and trust -----------------------------------------------------------------------
     packages = ds.packages
-    trusted = trust_closure(packages, opt.trust)
+    trusted = analysis.trusted_packages(packages, opt.trust)
     external_by_pkg: dict[str, set[str]] = defaultdict(set)
     for d in scope:
         for t in closure(d.id)[1]:
@@ -329,10 +280,9 @@ def build(opt: Options) -> dict:
         "decls": len(scope), "library": len(project),
         "theorems": len(theorems), "lemmas": sum(1 for d in scope if d.is_prop) - len(theorems),
         "definitions": sum(1 for d in scope if not d.is_prop),
-        "sorry": sum(1 for d in scope if has_sorry(d.name)),
-        "ownSorry": sum(1 for d in scope if has_sorry(d.name) and not sorry_deps(d)),
-        "extraAxioms": sorted({a for d in scope for a in axioms.get(d.name, {}).get("axioms", [])
-                               if a not in ORDINARY_AXIOMS and a != "sorryAx"}),
+        "sorry": sum(1 for d in scope if sorry[d.name].uses),
+        "ownSorry": sum(1 for d in scope if sorry[d.name].own),
+        "extraAxioms": sorted({a for d in scope for a in analysis.extra_axioms(ds, d.name)}),
     }
     modules_json = []
     for m in module_names:
@@ -374,7 +324,7 @@ def build(opt: Options) -> dict:
         "readme": {"name": readme[0], "text": readme[1]} if readme else None,
         "changes": changes.summary if changes else None,
         "specified": [[d.name, {"by": spec_of.get(d.name, []),
-                                "characterized": any(c["existence"] and c["uniqueness"] for c in chars.get(d.name, []))}]
+                                "characterized": analysis.is_characterized(chars.get(d.name, []))}]
                       for d in scope if not d.is_prop and (spec_of.get(d.name) or chars.get(d.name))],
         "evidence": {"records": sum(len(v) for v in reviews.values())} if reviews else None,
         "ledger": {"builds": led["builds"]} if led["builds"] else None,
@@ -422,72 +372,16 @@ def file_dates(root: Path | None, paths: set[str]) -> dict[str, dict]:
     return out
 
 
-def scoped(ds: Dataset, seeds: list[int], meaning: dict, ann: dict) -> tuple[set[int], set[int]]:
-    """The claims-only scope: the seeds, closed under `meaning` within the project, then closed again
-    after pulling in every theorem that specifies, exemplifies or characterizes a definition already
-    in scope, to a fixpoint. Returns (scope, the ids pulled in that way)."""
-    by_name = ds.by_name
-    targets_of: dict[str, set[str]] = defaultdict(set)    # theorem → definitions it is evidence about
-    for kind in ("specifies", "example_of", "nonexample_of"):
-        for thm, payloads in ann[kind].items():
-            for p in payloads:
-                targets_of[thm].add(p.get("target", ""))
-    for decl, payloads in ann["characterization"].items():
-        for p in payloads:
-            targets_of[decl].add(p.get("target", ""))
-    scope: set[int] = set()
-    pulled: set[int] = set()
-    frontier = list(seeds)
-    while True:
-        while frontier:
-            x = frontier.pop()
-            if x in scope:
-                continue
-            scope.add(x)
-            for t in meaning.get(x, ()):
-                if ds.decls[t].is_project and t not in scope:
-                    frontier.append(t)
-        in_scope = {ds.decls[i].name for i in scope}
-        new = [by_name[thm].id for thm, ts in targets_of.items()
-               if thm in by_name and by_name[thm].id not in scope and ts & in_scope]
-        if not new:
-            return scope, pulled
-        pulled.update(new)
-        frontier.extend(new)
-
-
-def trust_closure(packages: list[dict], trust: list[str]) -> set[str]:
-    """Trusting a package trusts everything it depends on."""
-    requires = {p["name"]: p["requires"] for p in packages}
-    out, stack = set(), list(trust)
-    while stack:
-        p = stack.pop()
-        if p in out:
-            continue
-        out.add(p)
-        stack.extend(requires.get(p, []))
-    return out
-
-
-def load_evidence(path: Path | None, ds: Dataset, base: Dataset | None) -> dict[str, list[dict]]:
-    """Published S3 review records, by declaration, with their status against this dataset."""
-    if not path or not Path(path).exists():
-        return {}
-    path = Path(path)
-    if path.is_dir():
-        from evidence_core.store import Store
-        records = Store.load(path).records
-    else:
+def load_evidence(path: Path | None, ds: Dataset, base: Dataset | None, store: Store | None = None
+                  ) -> dict[str, list[dict]]:
+    """Published reviews (S3), by declaration, as evidence-core resolves them against this dataset:
+    each with its status, its state (a withdrawn review stays listed, marked), and whether it is in
+    force."""
+    if store is not None:
+        records = store.records
+    elif path and Path(path).is_file():
         records = evrec.load(path)
-    out: dict[str, list[dict]] = defaultdict(list)
-    for r in records:
-        if r.get("kind") != "review":
-            continue
-        s = classify(r["subject"], ds, old=base)
-        name = s.decl.name if s.decl else r["subject"].get("name", "")
-        by = r.get("by", {})
-        out[name].append({"verdict": r.get("verdict"), "status": s.state, "at": r.get("at", ""),
-                          "by": by.get("identity", {}).get("id", "") or by.get("agent", ""),
-                          "agent": by.get("kind") == "agent", "rationale": r.get("rationale", ""),
-                          "origin": r.get("origin", {}), "id": r.get("id")})
-    return out
+    else:
+        return {}
+    ev = Evidence.resolve(records, ds, {base.commit: base} if base else None)
+    return {name: views_on(ev, name, "review") for name in ev.by_decl if views_on(ev, name, "review")}

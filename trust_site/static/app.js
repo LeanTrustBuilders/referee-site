@@ -70,16 +70,6 @@ function verdictBadge(name) {
 }
 
 /* ---------- S3 export and import ---------- */
-function canonical(v) {
-  if (Array.isArray(v)) return '[' + v.map(canonical).join(',') + ']';
-  if (v && typeof v === 'object') return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + canonical(v[k])).join(',') + '}';
-  return JSON.stringify(v);
-}
-async function recordId(rec) {
-  const body = {...rec}; delete body.id; delete body.signature;
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical(body)));
-  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
-}
 // Records are never anonymous (S3): an export names the reader's GitHub account, which a store then
 // checks against whoever submits it (a pull request's author).
 function githubLogin() {
@@ -95,16 +85,14 @@ async function exportRecords() {
   for (const [name, a] of Object.entries(audit.decls)) {
     if (!a.verdict) continue;
     const d = await declData(name); if (!d) continue;
-    const hashes = Object.fromEntries(Object.entries(d.hashes).filter(([, v]) => v));
-    const subject = {name: d.name, module: d.module, package: d.package, commit: S.subject.commit, toolchain: S.subject.toolchain,
-      hasher: {name: S.subject.hasher.name, revision: S.subject.hasher.revision, local: S.subject.hasher.local}, hashes,
-      kind: d.kind === 'Instance' ? 'instance' : (d.isProp ? 'statement' : 'definition')};
     upgradeVerdict(a, byName.get(name));
     if (a.meaning !== d.hashes.meaning) continue;   // made on another version: kept locally, not exported as current
-    const rec = {schema: 'ltb-evidence/0', kind: 'review', subject, verdict: a.verdict === 'accepted' ? 'accept' : 'question',
+    // The declaration's S1 key, as evidence-core wrote it; the record's id is set when it goes into a
+    // store (`evidence-store add`), by the same code that checks it.
+    const rec = {schema: 'ltb-evidence/0', kind: 'review', subject: d.subject, verdict: a.verdict === 'accepted' ? 'accept' : 'question',
       by: {kind: 'person', identity: {kind: 'github', id: login}}, at: a.at, origin: {kind: 'site', ref: location.href.split('#')[0]}};
     if (a.note) rec.rationale = a.note;
-    rec.id = await recordId(rec); out.push(rec);
+    out.push(rec);
   }
   const blob = new Blob([out.map(r => JSON.stringify(r)).join('\n') + '\n'], {type: 'application/x-ndjson'});
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${S.root || 'audit'}-reviews.jsonl`; a.click();
@@ -272,7 +260,7 @@ async function renderDecl(name) {
     if (e.edited && b.date && e.edited.date > b.date) p += ` File edited ${esc(e.edited.date)} without changing what it means.`;
     h += `<p class="muted" style="font-size:14px">${p}</p>`;
   } else if (e.edited) h += `<p class="muted" style="font-size:14px">File last edited ${esc(e.edited.date)}.</p>`;
-  if (e.reviews.length) h += `<h3>Published reviews</h3>` + e.reviews.map(r => `<div class="review ${esc(r.status)}"><b>${esc(r.verdict)}</b> by ${esc(r.by || 'someone')}${r.agent ? ' (AI agent)' : ''}, ${esc((r.at || '').slice(0, 10))} — <span class="muted">${esc(r.status)}</span>${r.rationale ? `<div>${md(r.rationale, true)}</div>` : ''}</div>`).join('');
+  if (e.reviews.length) h += `<h3>Published reviews</h3>` + e.reviews.map(r => `<div class="review ${esc(r.status)}${r.inForce ? '' : ' faded'}"><b>${esc(r.verdict)}</b> by ${esc(r.by.label || 'someone')}${r.by.kind === 'agent' ? ' (AI agent)' : ''}, ${esc((r.at || '').slice(0, 10))} — <span class="muted">${esc(r.status)}${r.inForce ? '' : r.supersededBy ? ', superseded' : `, ${esc(r.state)}`}</span>${r.url ? ` · <a href="${esc(r.url)}">thread</a>` : ''}${r.rationale ? `<div>${md(r.rationale, true)}</div>` : ''}</div>`).join('');
   h += auditControl(name);
   const b = beneath(row[R.ID]);
   h += `<h3>Dependency graph</h3><div class="graph" id="dg"></div>`;

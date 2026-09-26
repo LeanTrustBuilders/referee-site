@@ -24,7 +24,7 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--source", type=Path, help="a checkout of the library at the dataset's commit")
     b.add_argument("--baseline", type=Path, help="a dataset of an earlier commit, for Changes")
     b.add_argument("--evidence", type=Path, help="published evidence records (S3): a store's directory, or JSON lines")
-    b.add_argument("--ledger", type=Path, help="the provenance ledger (see `trust-site ledger`)")
+    b.add_argument("--ledger", type=Path, help="the provenance ledger (`evidence-core ledger` records builds in it)")
     b.add_argument("--claims-only", action="store_true",
                    help="only the claims, what their statements rest on, and the theorems specifying it")
     b.add_argument("--only", action="append", default=[], metavar="DECL",
@@ -60,11 +60,6 @@ def main(argv: list[str] | None = None) -> int:
                     help="treat a package, and everything it depends on, as trusted (repeatable)")
     ti.add_argument("--decl-url", default="", help="a page for each project declaration, {name} standing for it")
     ti.add_argument("--start", default="", help="the declaration shown first")
-    lg = sub.add_parser("ledger", help="record a build in the provenance ledger")
-    lg.add_argument("--ledger", type=Path, required=True, help="the ledger file (created if missing)")
-    lg.add_argument("--dataset", type=Path, required=True, help="the build's dataset (S2)")
-    lg.add_argument("--date", default="", help="the build's date (e.g. the commit date)")
-    lg.add_argument("--label", default="", help="a name for the build (e.g. `git describe`)")
     args = parser.parse_args(argv)
     if args.cmd == "claim":
         from .claim_page import ClaimOptions, build_claim
@@ -78,15 +73,6 @@ def main(argv: list[str] | None = None) -> int:
                                      body=args.body, trust=args.trust, decl_url=args.decl_url, start=args.start))
         print(f"trust-index: {r['decls']} declarations, {r['stmt']} statement and {r['body']} body edges, "
               f"{r['trusted']} trusted, {r['characterized']} characterized, {r['reviewed']} reviewed → {r['out']}")
-        return 0
-    if args.cmd == "ledger":
-        from evidence_core import Dataset
-        from . import ledger as ledger_mod
-        led = ledger_mod.load(args.ledger)
-        added = ledger_mod.record(led, Dataset.load(args.dataset), date=args.date, label=args.label)
-        ledger_mod.save(led, args.ledger)
-        print(f"ledger: {len(led['builds'])} builds, {len(led['decls'])} declarations"
-              + ("" if added else " (this commit was already the last build)"))
         return 0
     result = build(Options(dataset=args.dataset, out=args.out, source=args.source, baseline=args.baseline,
                            evidence=args.evidence, ledger=args.ledger, claims_only=args.claims_only, only=args.only,

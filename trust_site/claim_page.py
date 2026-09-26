@@ -8,12 +8,13 @@ datasets of older commits (to say what changed underneath a stale review).
 It is the site scoped to the claim (``build(only=[claim])``, whose data files it reuses, and which it
 keeps as ``site.html``), and a single page on top:
 
-* ``data/evidence.json``: every record about a declaration of the claim's closure, with its status
-  against this dataset (current, stale, …) and its place in a thread (open, fixed, answered,
-  withdrawn, superseded), the replies and statuses about it, and who made it;
-* ``index.html`` with ``assets/claim.js``, which computes coverage under the reader's policy (whose
-  reviews count) and links every "Review", "Report a problem" and "Ask a question" to the store's
-  issue forms, prefilled.
+* ``data/evidence.json``: every record about a declaration of the claim's closure as evidence-core
+  views it (its status against this dataset, its place in a thread, the replies and statuses about
+  it, who made it, the changes of state it allows), and where each declaration stands under every
+  policy the reader can choose (evidence-core's ``decl_state``);
+* ``index.html`` with ``assets/claim.js``, which shows the policy the reader picks and links every
+  "Review", "Report a problem" and "Ask a question" to the store's issue forms (evidence-store's),
+  prefilled.
 """
 from __future__ import annotations
 
@@ -23,14 +24,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from evidence_core import Dataset, Evidence
+from evidence_core import claims as claims_mod
 from evidence_core import records as recmod
+from evidence_core.coverage import all_policies, policy_key, POLICY_SWITCHES, UNCOUNTED
 from evidence_core.store import Store
+from evidence_core.views import record_view
+from evidence_store.forms import FORMS as STORE_FORMS
 
 from .build import Options, STATIC, build
 
-#: The store's issue forms, as evidence-store names them.
-FORMS = {"review": "evidence-review.yml", "problem": "evidence-problem.yml", "question": "evidence-question.yml",
-         "status": "evidence-status.yml"}
+#: The store's issue forms (evidence-store's), by kind.
+FORMS = {kind: form["file"] for kind, form in STORE_FORMS.items()}
 
 
 @dataclass
@@ -44,17 +48,6 @@ class ClaimOptions:
     at: list[Path] = field(default_factory=list)   # datasets of older commits
     repo: str | None = None             # where the issue forms are (default: the store's library repo)
     title: str | None = None
-
-
-def issue_url(origin: dict) -> str:
-    ref = (origin or {}).get("ref", "")
-    if ref.startswith("https://"):
-        return ref
-    if "#" in ref and "/" in ref.split("#")[0]:
-        repo, number = ref.split("#", 1)
-        if number.isdigit():
-            return f"https://github.com/{repo}/issues/{number}"
-    return ""
 
 
 def reading_order(ds: Dataset, names: set[str], meaning: dict) -> list[str]:
@@ -82,8 +75,13 @@ def build_claim(opt: ClaimOptions) -> dict:
     store = Store.load(opt.store) if opt.store else None
     records = store.records if store else (recmod.load(opt.evidence) if opt.evidence else [])
     config = store.config if store else {}
-    claim = opt.claim or next(iter(config.get("claims") or []), None) or \
-        next(iter(sorted(ds.annotations("claim"))), None)
+    # The claim: the one given, else the first the library claims (evidence-core's claims: the store's
+    # list, formalization.yaml, Comparator configs, @[claim]).
+    names = {d.name for d in ds.decls if d.is_project}
+    found = claims_mod.resolve(opt.source, names, explicit=[opt.claim] if opt.claim else None,
+                               annotations=ds.annotations("claim"),
+                               store_claims=config.get("claims") or None).names
+    claim = found[0] if found else opt.claim
     if not claim or claim not in ds.by_name:
         raise SystemExit(f"no claim to build a page for ({claim or 'none given'})")
     repo = opt.repo or config.get("library", {}).get("repo") or ds.meta.get("library", {}).get("repo", "")
@@ -106,38 +104,14 @@ def build_claim(opt: ClaimOptions) -> dict:
     upstream = sorted({d.name for d in closure if not d.is_project})
     order = reading_order(ds, members, meaning)
 
-    def by_json(by: dict) -> dict:
-        agent = by.get("agent") if isinstance(by.get("agent"), dict) else \
-            (recmod.parse_agent(by["agent"]) if by.get("agent") else None)
-        return {"kind": by.get("kind"), "login": (by.get("identity") or {}).get("id", ""),
-                "agent": agent, "label": recmod.who(by), "involvement": by.get("involvement", "unknown")}
-
-    rows = []
-    for name in order:
-        for r, s in ev.records_on(name):
-            row = {"id": r["id"], "kind": r["kind"], "decl": name, "at": r.get("at", ""),
-                   "by": by_json(r.get("by", {})), "url": issue_url(r.get("origin")),
-                   "status": s.state, "applies": s.applies, "changed": s.changed,
-                   "commit": (r.get("subject") or {}).get("commit", ""),
-                   "renamedFrom": (r.get("subject") or {}).get("name") if s.state == "renamed" else None}
-            if r["kind"] == "review":
-                row.update(verdict=r["verdict"], category=(r.get("problem") or {}).get("category"),
-                           reference=r.get("reference"), checked=r.get("checked") or {},
-                           caveats=r.get("caveats") or [], rationale=r.get("rationale", ""),
-                           state=ev.state(r["id"]), supersededBy=ev.superseded_by.get(r["id"]),
-                           supersedes=(r.get("links") or {}).get("supersedes"),
-                           replies=[c["id"] for c in ev.replies.get(r["id"], [])],
-                           statuses=[{"state": x["state"], "at": x.get("at", ""), "by": by_json(x.get("by", {})),
-                                      "note": x.get("note", ""), "commit": x.get("commit", ""),
-                                      "url": issue_url(x.get("origin"))}
-                                     for x in ev.statuses.get(r["id"], [])])
-            elif r["kind"] == "comment":
-                row.update(text=r.get("text", ""), repliesTo=(r.get("links") or {}).get("replies_to"))
-            elif r["kind"] == "test":
-                row.update(test=(r.get("test") or {}).get("name"), checks=r.get("checks", ""))
-            elif r["kind"] == "named":
-                row.update(name=r.get("name", ""), what=r.get("what", ""))
-            rows.append(row)
+    rows = [record_view(ev, r, s, name) for name in order for r, s in ev.records_on(name)]
+    # Where each declaration stands under every policy the reader can pick: the page only looks up
+    # the one chosen (keys: evidence-core's policy_key, switches in POLICY_SWITCHES order).
+    states, why = {}, {}
+    for p in all_policies():
+        k = policy_key(p)
+        states[k] = {n: ev.decl_state(n, p) for n in order + upstream}
+        why[k] = {n: ev.why_uncounted(n, p) for n, st_ in states[k].items() if st_ == UNCOUNTED}
 
     ann = ds.annotations("claim").get(claim) or [{}]
     data = {
@@ -145,6 +119,7 @@ def build_claim(opt: ClaimOptions) -> dict:
         "forms": FORMS if store else {}, "order": order, "upstream": upstream,
         "packages": sorted({d.package for d in closure if not d.is_project}),
         "records": rows, "orphans": len(ev.orphans),
+        "policy": {"switches": list(POLICY_SWITCHES), "states": states, "why": why},
         "store": {"records": len(records), "maintainers": config.get("maintainers", [])} if store else None,
         "agentCommand": f"evidence-store submit --repo {repo} --decl NAME --verdict accept "
                         f"--rationale \"…\" --agent \"TOOL, MODEL\"" if store and repo else "",

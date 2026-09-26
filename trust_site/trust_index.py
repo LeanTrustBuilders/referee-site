@@ -45,8 +45,10 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from evidence_core import Dataset, classify
+from evidence_core import Dataset, Evidence
+from evidence_core import analysis
 from evidence_core import records as evrec
+from evidence_core.store import Store
 
 #: Declarations per code file, as `trust export` writes them.
 CODE_SHARD_SIZE = 2000
@@ -184,52 +186,49 @@ def code_row(ds: Dataset, r: Renderer, decl, sig: dict | None, stmt: dict | None
 
 
 def characterizations(ds: Dataset) -> list[dict]:
-    """Each definition that theorems specify or characterize, with those theorems."""
-    by_target: dict[str, list[str]] = defaultdict(list)
-    notes: dict[str, list[str]] = defaultdict(list)
-    for thm, payloads in ds.annotations("specifies").items():
-        for p in payloads:
-            by_target[p.get("target", "")].append(thm)
-    for decl, payloads in ds.annotations("characterization").items():
-        for p in payloads:
-            target, role = p.get("target", ""), p.get("role")
-            if role in ("existence", "uniqueness"):
-                by_target[target].append(decl)
-            elif role == "property":
-                notes[target].append(f"characterized by {decl}")
+    """Each definition that theorems specify or characterize, with those theorems (evidence-core's
+    analysis, in trust's shape)."""
+    specs, chars = analysis.specifications(ds), analysis.characterizations(ds)
     out = []
-    for target in sorted(by_target):
+    for target in sorted(set(specs) | set(chars)):
         if target not in ds.by_name:
             continue
-        theorems = list(dict.fromkeys(t for t in by_target[target] if t in ds.by_name and t != target))
+        theorems = [x["decl"] for x in specs.get(target, []) if x["kind"] == "specifies"] + \
+            [d for c in chars.get(target, []) for d in c["existence"] + [u["decl"] for u in c["uniqueness"]]]
+        theorems = list(dict.fromkeys(t for t in theorems if t in ds.by_name and t != target))
         if theorems:
-            out.append({"definition": target, "theorems": theorems, "note": "; ".join(notes[target])})
+            note = "; ".join(f"characterized by {c['property']}" for c in chars.get(target, []) if c.get("property"))
+            out.append({"definition": target, "theorems": theorems, "note": note})
     return out
 
 
 def marks(ds: Dataset, opt: IndexOptions, trusted_packages: list[str]) -> dict:
+    """trust's marks from published reviews, as evidence-core resolves them: a declaration is trusted
+    while an acceptance of it is in force and applies; every review in force says whether what it
+    reviewed has changed since."""
     trusted: dict[str, dict] = {}
     protected: dict[str, dict] = {}
-    if opt.evidence and Path(opt.evidence).exists():
-        for rec in evrec.load(Path(opt.evidence)):
-            if rec.get("kind") != "review":
-                continue
-            subject = rec["subject"]
-            s = classify(subject, ds)
-            name = s.decl.name if s.decl else subject.get("name", "")
-            by = rec.get("by", {})
-            who = by.get("identity", {}).get("id", "") or by.get("agent", "") or "someone"
-            commit = rec.get("origin", {}).get("commit", "") or subject.get("commit", "")
-            note = f"{rec.get('verdict', '?')} by {who}" + (f" on {rec['at'][:10]}" if rec.get("at") else "")
-            if rec.get("rationale"):
-                note += f": {rec['rationale']}"
-            if s.applies and rec.get("verdict") == "accepted":
-                trusted[name] = {"name": name, "commit": commit, "note": note}
-            entry = {"name": name, "note": note, "status": PROTECTION.get(s.state, "unrecorded")}
-            if entry["status"] == "changed":
-                entry.update(recordedHash=(subject.get("hashes") or {}).get("meaning", ""),
-                             currentHash=s.decl.meaning if s.decl else "", recordedAt=commit)
-            protected[name] = entry
+    path = Path(opt.evidence) if opt.evidence else None
+    if path and path.exists():
+        records = Store.load(path).records if path.is_dir() else evrec.load(path)
+        ev = Evidence.resolve(records, ds)
+        for name, rows in sorted(ev.by_decl.items()):
+            for r, s in rows:
+                if r.get("kind") != "review" or not ev.in_force(r):
+                    continue
+                subject = r["subject"]
+                commit = subject.get("commit", "")
+                note = f"{r.get('verdict', '?')} by {evrec.who(r.get('by', {})) or 'someone'}" + \
+                    (f" on {r['at'][:10]}" if r.get("at") else "")
+                if r.get("rationale"):
+                    note += f": {r['rationale']}"
+                if s.applies and r.get("verdict") == "accept":
+                    trusted[name] = {"name": name, "commit": commit, "note": note}
+                entry = {"name": name, "note": note, "status": PROTECTION.get(s.state, "unrecorded")}
+                if entry["status"] == "changed":
+                    entry.update(recordedHash=(subject.get("hashes") or {}).get("meaning", ""),
+                                 currentHash=s.decl.meaning if s.decl else "", recordedAt=commit)
+                protected[name] = entry
     return {"version": 1, "hasher": ds.hasher.get("name", ""), "trusted": list(trusted.values()),
             "characterizations": characterizations(ds), "protected": list(protected.values()),
             "trustedPackages": trusted_packages}
@@ -288,9 +287,8 @@ def build_index(opt: IndexOptions) -> dict:
                                    ensure_ascii=False, separators=(",", ":")))
         (out / "code" / f"{shard // CODE_SHARD_SIZE}.jsonl").write_text("\n".join(rows) + "\n", encoding="utf-8")
 
-    from .build import trust_closure
     packages = ds.packages
-    trusted_packages = sorted(trust_closure(packages, opt.trust)) if opt.trust else []
+    trusted_packages = sorted(analysis.trusted_packages(packages, opt.trust)) if opt.trust else []
     m = marks(ds, opt, trusted_packages)
     (out / "marks.json").write_text(json.dumps(m, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
 

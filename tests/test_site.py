@@ -6,6 +6,9 @@ specifies `double` and `triple`; `IsDouble` characterizes `double`. The datasets
 trust-extract 0.6 (`test/run.sh KEEP_DIR` in LeanTrustBuilders/extractor), fixture-b-closure the
 same commit extracted with `--upstream-closure term`, and source-a/source-b the fixture's sources.
 
+What the pages show is computed by evidence-core (claims, changes, the ledger, source text, the
+dataset's analyses, record views), whose own tests cover it; these test the pages built from it.
+
 Run with ``python3 -m unittest discover -s tests``.
 """
 from __future__ import annotations
@@ -18,12 +21,10 @@ from pathlib import Path
 
 from evidence_core import Dataset
 
+from evidence_core import ledger as ledger_mod
+
 from trust_site import Options, build
-from trust_site import claims as claims_mod
-from trust_site import ledger as ledger_mod
-from trust_site.build import scoped, shard_of
-from trust_site.changes import compare
-from trust_site.source import split_statement
+from trust_site.build import shard_of
 from trust_site.trust_index import IndexOptions, build_index
 
 V = Path(__file__).parent / "vectors"
@@ -32,130 +33,12 @@ F = "Fixture."
 
 
 
-class LegacyLedgerTests(unittest.TestCase):
-    def test_a_history_recorded_before_ltb_dataset_1_carries_over(self):
-        from trust_site import ledger as ledger_mod
-        a = Dataset.load(V / "fixture-a")
-        # The history as a site built from ltb-dataset/0 datasets left it: the old meaning hashes.
-        led = {"builds": [{"commit": "before", "date": "", "label": "before"}],
-               "decls": {d.name: [[0, d.legacy_meaning]] for d in a.decls if d.is_project and d.legacy_meaning}}
-        self.assertTrue(ledger_mod.record(led, a))
-        self.assertTrue(all(len(h) == 1 and h[0][1] == a.by_name[n].meaning for n, h in led["decls"].items()))
-
-class ClaimsTests(unittest.TestCase):
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.root = Path(self.tmp.name)
-        self.names = {d.name for d in B.decls if d.is_project}
-
-    def tearDown(self):
-        self.tmp.cleanup()
-
-    def config(self, path: str, names: list[str]) -> None:
-        p = self.root / path
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps({"challenge_module": "Challenge", "solution_module": "Solution",
-                                 "theorem_names": names, "permitted_axioms": ["propext"]}))
-
-    def test_formalization_yaml_ranks_a_comparator_config(self):
-        self.config("comparator/pos.json", [F + "triple_comm", F + "triple_pos"])
-        (self.root / "formalization.yaml").write_text(f"""
-status:
-  scope: >-
-    Everything about triples.
-  main_results:
-    - declaration: "{F}triple_pos"
-      source_statement: "Theorem 1"
-      comparator_config: "comparator/pos.json"
-    - declaration: "{F}missing"
-      file: "Fixture/Gone.lean"
-""")
-        cl = claims_mod.resolve(self.root, self.names)
-        self.assertEqual([c.decl for c in cl.claims], [F + "triple_pos", F + "missing"])
-        self.assertEqual(cl.claims[0].label, "Theorem 1")
-        # The file ranks the config: its declaration is the headline, the config's other name an
-        # additional target.
-        self.assertEqual(cl.claims[0].additional, [F + "triple_comm"])
-        self.assertEqual(cl.claims[0].comparator["permitted_axioms"], ["propext"])
-        self.assertFalse(cl.claims[1].found)
-        self.assertTrue(any("missing" in w for w in cl.warnings))
-        self.assertEqual(cl.scope, "Everything about triples.")
-        self.assertEqual(cl.names, [F + "triple_pos"])
-
-    def test_one_config_is_one_claim(self):
-        self.config("comparator/both.json", [F + "triple_comm", F + "triple_pos"])
-        cl = claims_mod.resolve(self.root, self.names)
-        self.assertEqual([(c.decl, c.additional, c.source) for c in cl.claims],
-                         [(F + "triple_comm", [F + "triple_pos"], "comparator")])
-
-    def test_annotations_and_the_command_line(self):
-        cl = claims_mod.resolve(self.root, self.names, annotations=B.annotations("claim"))
-        self.assertEqual([(c.decl, c.reference) for c in cl.claims], [(F + "triple_pos", "Fixture, Theorem 1")])
-        cl = claims_mod.resolve(self.root, self.names, explicit=[F + "double"], annotations=B.annotations("claim"))
-        self.assertEqual([c.decl for c in cl.claims], [F + "double"])
-
-    def test_a_malformed_file_is_a_warning(self):
-        (self.root / "formalization.yaml").write_text("status: [unclosed\n")
-        cl = claims_mod.resolve(self.root, self.names)
-        self.assertEqual(cl.claims, [])
-        self.assertTrue(cl.warnings)
-
-
-class ScopeTests(unittest.TestCase):
-    def test_statement_closure_then_the_specifying_theorems(self):
-        ann = {a: B.annotations(a) for a in ("specifies", "characterization", "example_of", "nonexample_of")}
-        seed = B.by_name[F + "double_zero"].id
-        scope, pulled = scoped(B, [seed], B.edges("meaning"), ann)
-        names = {B.decls[i].name for i in scope}
-        # What `double_zero`'s statement rests on …
-        self.assertIn(F + "double", names)
-        # … the theorems saying what `double` means, and what their statements rest on in turn.
-        for n in ("double_triple", "IsDouble", "isDouble_double", "IsDouble.unique", "triple"):
-            self.assertIn(F + n, names, n)
-        self.assertIn(B.by_name[F + "double_triple"].id, pulled)
-        # Nothing a proof merely calls.
-        self.assertNotIn(F + "triple_pos", names)
-
-
-class ChangesTests(unittest.TestCase):
-    def test_classes(self):
-        ch = compare(B, A)
-        self.assertEqual(ch.status[F + "double"], "body")           # same statement, new body
-        self.assertEqual(ch.status[F + "triple_one"], "statement")
-        self.assertEqual(ch.status[F + "double_zero"], "underneath")
-        self.assertEqual(ch.detail[F + "double_zero"]["causes"], [F + "double"])
-        self.assertEqual(ch.status[F + "triple_three'"], "renamed")
-        self.assertEqual(ch.detail[F + "triple_three'"]["was"], F + "triple_three")
-        self.assertNotIn(F + "triple_comm", ch.status)                 # a renamed binder is no change
-        self.assertEqual(ch.summary["counts"]["removed"], 0)
-
-
-class LedgerTests(unittest.TestCase):
-    def test_history_follows_renames(self):
-        led = ledger_mod.load(None)
-        self.assertTrue(ledger_mod.record(led, A, date="2026-01-01", label="A"))
-        self.assertFalse(ledger_mod.record(led, A))
-        self.assertTrue(ledger_mod.record(led, B, date="2026-01-02", label="B"))
-        self.assertEqual([k for k, _ in led["decls"][F + "double"]], [0, 1])
-        self.assertEqual([k for k, _ in led["decls"][F + "triple_comm"]], [0])
-        self.assertEqual([k for k, _ in led["decls"][F + "triple_three'"]], [0])   # carried over
-        self.assertNotIn(F + "triple_three", led["decls"])
-
-
 class ShardTests(unittest.TestCase):
     def test_the_hash_the_page_computes(self):
         # FNV-1a over UTF-16 code units: the page computes the same (app.js, `fnv`).
         self.assertEqual(shard_of("", 1 << 31), 0x811C9DC5 % (1 << 31))
         self.assertEqual(shard_of("a", 1 << 32), 0xE40C292C)
         self.assertEqual(shard_of("𝟚", 1 << 32), shard_of("𝟚", 1 << 32))
-
-
-class SourceTests(unittest.TestCase):
-    def test_split(self):
-        self.assertEqual(split_statement("theorem t (h : a = (b := c)) : x := by simp"),
-                         ("theorem t (h : a = (b := c)) : x", ":= by simp"))
-        self.assertEqual(split_statement('theorem t : f "a := b" := rfl')[0], 'theorem t : f "a := b"')
-        self.assertEqual(split_statement("instance : Foo Nat where\n  x := 1")[0], "instance : Foo Nat")
 
 
 class BuildTests(unittest.TestCase):
@@ -218,11 +101,14 @@ class TrustIndexTests(unittest.TestCase):
             tmp = Path(tmp)
             # Reviews made at A: `triple` is unchanged in B, `double` rewritten.
             ev = tmp / "evidence.jsonl"
-            recs = [evrec.with_id({"spec": "ltb-evidence/0", "kind": "review", "verdict": "accepted",
+            recs = [evrec.with_id({"schema": evrec.SCHEMA, "kind": "review", "verdict": "accept",
                                    "subject": evrec.subject_from_decl(A.by_name[F + n], A),
-                                   "by": {"kind": "person", "identity": {"id": "someone"}},
+                                   "by": {"kind": "person", "identity": {"kind": "github", "id": "someone"}},
                                    "at": "2026-09-01T00:00:00Z", "rationale": "read it"})
-                    for n in ("triple", "double")]
+                    for n in ("triple", "double", "triple_one")]
+            # A withdrawn review is no mark.
+            recs.append(evrec.with_id({"schema": evrec.SCHEMA, "kind": "status", "target": recs[2]["id"],
+                                       "state": "withdrawn", "by": recs[2]["by"], "at": "2026-09-02T00:00:00Z"}))
             ev.write_text("".join(json.dumps(r) + "\n" for r in recs))
             r = build_index(IndexOptions(dataset=V / "fixture-b-closure", out=tmp, name="fx", evidence=ev,
                                          trust=["lean4"], decl_url="../site/#/d/{name}"))
@@ -314,6 +200,14 @@ class ClaimPageTests(unittest.TestCase):
             # Made at A: `triple` is unchanged in B, and `triple_pos` too.
             self.assertEqual((rows[acc["id"]]["status"], rows[old["id"]]["status"]), ("current", "current"))
             self.assertEqual(r["records"], 4)
+            # What each record allows, and where each declaration stands under every policy, as
+            # evidence-core decided.
+            self.assertEqual((rows[acc["id"]]["actions"], rows[prob["id"]]["actions"]), (["withdraw"], ["reopen"]))
+            states = e["policy"]["states"]
+            self.assertEqual(len(states), 16)
+            self.assertEqual((states["0011"][F + "triple"], states["1011"][F + "triple"]), ("uncounted", "covered"))
+            self.assertEqual(e["policy"]["why"]["0011"][F + "triple"], "agents")
+            self.assertEqual(states["0011"][F + "triple_pos"], "covered")
 
 
 if __name__ == "__main__":

@@ -2,4 +2,4 @@
 from .build import Options, build
 
 __all__ = ["Options", "build"]
-__version__ = "0.1.0"
+__version__ = "0.2.0"
