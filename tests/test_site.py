@@ -94,6 +94,18 @@ class BuildTests(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 build(Options(dataset=V / "fixture-b", out=out, only=[F + "nothing"]))
 
+            # A slice: a module's declarations, and what their statements rest on in other modules.
+            build(Options(dataset=V / "fixture-b", out=out, source=V / "source-b", modules=["Fixture.Uses"]))
+            site = json.loads((out / "data" / "site.json").read_text())
+            sc = site["scope"]
+            self.assertEqual((sc["mode"], sc["modules"], sc["inModules"]), ("modules", ["Fixture.Uses"], 4))
+            self.assertLess(sc["size"], sc["library"])
+            names = {row[1] for row in json.loads((out / "data" / "decls.json").read_text())}
+            self.assertIn(F + "double", names)                          # from Fixture.Basic, underneath
+            self.assertNotIn(F + "double_two", names)                   # Fixture.Notation: not underneath
+            with self.assertRaises(SystemExit):
+                build(Options(dataset=V / "fixture-b", out=out, modules=["Fixture.Nope"]))
+
 
 class TrustIndexTests(unittest.TestCase):
     """The index trust-web reads, written from a dataset and evidence."""

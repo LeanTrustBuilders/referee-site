@@ -295,6 +295,8 @@ function scopeNotice() {
   if (!scoped()) return '';
   const sc = S.scope, seeds = sc.seeds.length;
   const pulled = sc.pulled ? `, ${plural(sc.pulled, 'theorem')} saying what those definitions mean` : '';
+  if (sc.mode === 'modules')
+    return `<div class="notice"><b>${plural(sc.size, 'declaration')}</b>: the ${sc.inModules.toLocaleString('en')} of ${sc.modules.map(m => `<code>${esc(m)}</code>`).join(' and ')}, the ${(sc.size - sc.inModules - sc.pulled).toLocaleString('en')} their <b>statements</b> rest on${pulled}, out of ${sc.library.toLocaleString('en')} the library exposes. What the proofs call is not here, and every count on this site is over these ${sc.size.toLocaleString('en')}.</div>`;
   return `<div class="notice"><b>${plural(sc.size, 'declaration')}</b>: the ${plural(seeds, sc.mode === 'only' ? 'declaration' : 'result')} ${sc.mode === 'only' ? 'this site is built for' : 'this project puts forward'}, the ${(sc.size - seeds - sc.pulled).toLocaleString('en')} their <b>statements</b> rest on${pulled}, out of ${sc.library.toLocaleString('en')} the library exposes. What the proofs call is not here, and every count on this site is over these ${sc.size.toLocaleString('en')}.</div>`;
 }
 
@@ -370,7 +372,10 @@ function renderHome() {
   const proved = c.sorry === 0 ? `All of them are proved with no <code>sorry</code> anywhere.` : `${plural(c.sorry, 'of them depends', 'of them depend')} on a <code>sorry</code> (see <a href="#/sorries">Sorries</a>).`;
   const leftOut = S.scope.mode === 'full' && c.deprecated > c.deprecatedShown ? ` <span class="muted">${plural(c.deprecated - c.deprecatedShown, 'deprecated declaration is', 'deprecated declarations are')} left out: kept only so that older code compiles.</span>` : '';
   if (S.community) h += `<div class="notice">Two ways to review here: <b>mine</b>, private to this browser, and <b>the community's</b>, ${plural(S.community.records, 'record')} by people and AI agents in the evidence store. You are reading ${community() ? "the community's" : 'your own'}; switch in the side bar, and see <a href="#/community">the community's reviews</a>.</div>`;
-  h += `<p class="lead"><code>${esc(S.root)}</code> has ${plural(c.decls, 'declaration')}: <a href="#/theorems">${plural(c.theorems, 'theorem')}</a>, ${plural(c.lemmas, 'lemma')} and ${plural(c.definitions, 'definition')}. ${proved} ${kernelSentence()}${leftOut}</p>`;
+  const kinds = `<a href="#/theorems">${plural(c.theorems, 'theorem')}</a>, ${plural(c.lemmas, 'lemma')} and ${plural(c.definitions, 'definition')}`;
+  // A scoped site shows part of the library: its counts are of that part, not of the library.
+  const counted = scoped() ? `Of these ${c.decls.toLocaleString('en')} declarations:` : `<code>${esc(S.root)}</code> has ${plural(c.decls, 'declaration')}:`;
+  h += `<p class="lead">${counted} ${kinds}. ${proved} ${kernelSentence()}${leftOut}</p>`;
   const cl = S.claims;
   if (cl.claims.length) {
     const src = cl.sources.includes('formalization.yaml') ? 'in a <code>formalization.yaml</code>' : cl.sources.includes('comparator') ? 'in its Comparator setup' : cl.sources.includes('annotation') ? 'with <code>@[claim]</code>' : 'on the command line';

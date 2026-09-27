@@ -29,6 +29,9 @@ def main(argv: list[str] | None = None) -> int:
                    help="only the claims, what their statements rest on, and the theorems specifying it")
     b.add_argument("--only", action="append", default=[], metavar="DECL",
                    help="the site of one declaration: --claims-only with a claim set of one (repeatable)")
+    b.add_argument("--modules", action="append", default=[], metavar="MODULE",
+                   help="a slice of the library: the declarations of this module and its submodules, and "
+                        "what their statements rest on (repeatable)")
     b.add_argument("--claim", action="append", default=[], metavar="NAME",
                    help="name a main result explicitly; repeatable; overrides discovery")
     b.add_argument("--comparator", type=Path, help="where the Comparator configs are (auto-detected otherwise)")
@@ -76,6 +79,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     result = build(Options(dataset=args.dataset, out=args.out, source=args.source, baseline=args.baseline,
                            evidence=args.evidence, ledger=args.ledger, claims_only=args.claims_only, only=args.only,
+                           modules=args.modules,
                            claim=args.claim, comparator=args.comparator, trust=args.trust,
                            title=args.title, repo=args.repo, issues_repo=args.issues_repo))
     for w in result["warnings"]:

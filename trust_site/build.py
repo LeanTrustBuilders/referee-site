@@ -57,6 +57,7 @@ class Options:
     ledger: Path | None = None       # provenance across builds (see ledger.py)
     claims_only: bool = False
     only: list[str] = field(default_factory=list)
+    modules: list[str] = field(default_factory=list)   # a slice: these modules and what their statements rest on
     claim: list[str] = field(default_factory=list)
     comparator: Path | None = None
     trust: list[str] = field(default_factory=list)
@@ -127,8 +128,20 @@ def build(opt: Options) -> dict:
     resolver = docs_mod.Resolver(ds)
     cl = claims_mod.resolve(opt.source, names, explicit=opt.claim or None, comparator_dir=opt.comparator,
                             annotations=ann["claim"], store_claims=(store.config.get("claims") if store else None))
-    mode = "only" if opt.only else ("claims" if opt.claims_only else "full")
-    if mode != "full":
+    mode = "only" if opt.only else ("modules" if opt.modules else ("claims" if opt.claims_only else "full"))
+    in_modules = 0
+    if mode == "modules":
+        # A slice of a library: every declaration of these modules (and their submodules) except the
+        # deprecated, with the claims named, closed under what their statements rest on.
+        prefixes = tuple(opt.modules)
+        seeds = [d.name for d in project if d.name not in deprecated and
+                 (d.module in prefixes or d.module.startswith(tuple(m + "." for m in prefixes)))]
+        in_modules = len(seeds)
+        if not seeds:
+            raise SystemExit(f"--modules: no declaration in {', '.join(opt.modules)}")
+        seeds += [c for c in cl.names if c not in set(seeds)]
+        scope_ids, pulled = analysis.claim_scope(ds, seeds)
+    elif mode != "full":
         seeds = opt.only if opt.only else cl.names
         missing = [s for s in seeds if s not in names]
         if missing:
@@ -352,6 +365,7 @@ def build(opt: Options) -> dict:
         "producer": ds.producer(), "hasher": ds.hasher,
         "subject": {"commit": commit, "toolchain": ds.toolchain, "hasher": ds.hasher},
         "scope": {"mode": mode, "seeds": opt.only if opt.only else (cl.names if mode == "claims" else []),
+                  "modules": opt.modules, "inModules": in_modules,
                   "size": len(scope), "library": len(project), "pulled": len(pulled)},
         "counts": counts,
         "chapters": chapter_list, "modules": modules_json,
@@ -412,19 +426,36 @@ def build(opt: Options) -> dict:
 
 
 def file_dates(root: Path | None, paths: set[str]) -> dict[str, dict]:
-    """When each source file was last edited: its last commit in the checkout's git history."""
+    """When each source file was last edited: its last commit in the checkout's git history.
+
+    One pass over the history, newest first, keeping the first commit that names each file, and
+    stopping once every file has one. Asking git file by file took over an hour on Mathlib."""
     out: dict[str, dict] = {}
-    if not root or not (Path(root) / ".git").exists():
+    if not root or not (Path(root) / ".git").exists() or not paths:
         return out
-    for p in sorted(paths):
-        try:
-            r = subprocess.run(["git", "-C", str(root), "log", "-1", "--format=%H %cs", "--", p],
-                               capture_output=True, text=True, timeout=30)
-        except (OSError, subprocess.TimeoutExpired):
-            continue
-        if r.returncode == 0 and r.stdout.strip():
-            commit, date = r.stdout.split()
-            out[p] = {"commit": commit, "date": date}
+    try:
+        # The history names files from the repository's top; `paths` are relative to `root`.
+        prefix = subprocess.run(["git", "-C", str(root), "rev-parse", "--show-prefix"],
+                                capture_output=True, text=True, timeout=30).stdout.strip()
+        proc = subprocess.Popen(["git", "-C", str(root), "-c", "core.quotePath=false", "log",
+                                 "--format=%x00%H %cs", "--name-only", "--no-renames"],
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, errors="replace")
+    except (OSError, subprocess.TimeoutExpired):
+        return out
+    want = {prefix + p: p for p in paths}
+    commit = date = ""
+    try:
+        for line in proc.stdout:
+            line = line.rstrip("\n")
+            if line.startswith("\x00"):
+                commit, _, date = line[1:].partition(" ")
+            elif line in want and want[line] not in out:
+                out[want[line]] = {"commit": commit, "date": date}
+                if len(out) == len(want):
+                    break
+    finally:
+        proc.kill()
+        proc.wait()
     return out
 
 
