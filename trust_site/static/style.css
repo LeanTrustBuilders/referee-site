@@ -233,7 +233,6 @@ body.anat-expanded .anat .exp { display: block; }
 .audit .rv-form { display: grid; gap: 8px; margin: 8px 0; }
 .audit .rv-form label { display: grid; gap: 3px; font-size: 13px; color: var(--muted); }
 .audit .rv-form input, .audit .rv-form select, .audit .rv-form textarea { font: inherit; font-size: 14px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
-.audit .rv-form .dim { opacity: .55; }
 .audit .rv-checks { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; font-size: 13px; }
 .audit .rv-checks .lbl { color: var(--muted); margin-right: 4px; }
 .audit .rv-checks .ck { font: inherit; font-size: 12.5px; border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; background: transparent; color: var(--muted); cursor: pointer; }
@@ -243,3 +242,4 @@ body.anat-expanded .anat .exp { display: block; }
 .community { margin: 18px 0; }
 .community h3 { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .cov li { margin: 5px 0; }
+.audit [hidden] { display: none !important; }   /* the form sets display on its parts: hidden must win */
