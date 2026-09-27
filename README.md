@@ -39,17 +39,35 @@ reader judging a claim needs, and no dependency edge points at them). `--only DE
 a claim set of one. Every count on a scoped site is over the scope, and the home page says so first.
 On alpha-rar, 6 claims give a site of 53 declarations out of 815, as Referee's does.
 
-## Your audit, and published evidence
+## Two ways to review: mine, and the community's
 
-Verdicts (accepted, query, with a note) live in the reader's browser, keyed by each declaration's
-meaning hash, so a verdict on a declaration that has changed since reads "accepted, then changed".
-**Export** writes them as [S3](https://github.com/LeanTrustBuilders/specs) review records under the
-reader's GitHub account (records are never anonymous), each keyed by the declaration's S1 key as
-evidence-core wrote it into the site; `evidence-store add FILE`, in a checkout of an
+With `--evidence` (an evidence store's directory, or a JSONL file of records), the site has two modes,
+switched in the side bar; every badge, coverage count, graph mark and list follows the one chosen.
+
+**Mine** is a private review in the reader's browser, as detailed as a published one: a verdict
+(accept, problem, question), what is wrong (the failure mode, for a problem), what it was compared
+with, which failure modes were checked (F1–F9 and the name: checked, not applicable, or not), caveats,
+the reviewer's involvement, and why. Reviews are keyed by each declaration's meaning hash, so one of a
+declaration that has changed since reads "then changed" (keys `a`, `p`, `q`, `u` set a verdict).
+**Submit to the community** opens the store's form for that verdict with the review filled in, as far
+as a link can fill a GitHub form (the failure-mode checkboxes are ticked there). **Export** writes all
+of them as [S3](https://github.com/LeanTrustBuilders/specs) review records under the reader's GitHub
+account (records are never anonymous), each keyed by the declaration's S1 key as evidence-core wrote
+it into the site; `evidence-store add FILE`, in a checkout of an
 [evidence store](https://github.com/LeanTrustBuilders/evidence-store), checks them, gives them their
-ids and adds them, for a pull request from that account. **Import** reads them back. `--evidence`
-shows published records (a store's directory, or a JSONL file) on each declaration's page, with
-their status against this build, withdrawn and superseded ones marked, and coverage can count them.
+ids and adds them, for a pull request from that account. **Import** reads them back. Without
+evidence, this is the only mode.
+
+**The community's** is the store's reviews, by people and AI agents, as the claim page shows them:
+each declaration's reviews as threads (verdict, what was compared, what was checked, caveats, replies,
+what became of it, and the changes of state its author or a maintainer may make), what each failure
+mode was checked by, and the store's forms to review, report, ask or propose a test. Where each
+declaration stands (reviewed, not counted, out of date, problem, disputed, not reviewed) depends on
+**whose reviews the reader counts**: AI agents, reviews made before something underneath changed,
+acceptances with caveats, authors' own. evidence-core decides it under all 16 policies when the site is
+built, and the page shows the reader's. The **Community** page holds the policy, each claim's coverage
+under it, what to review next (evidence-core's queue), the reviewers and the activity. The policy is
+shared with the claim page of the same repository.
 
 **What is computed where.** This package lays pages out; what they say is computed by the suite's
 tools: [evidence-core](https://github.com/LeanTrustBuilders/evidence-core) resolves records against

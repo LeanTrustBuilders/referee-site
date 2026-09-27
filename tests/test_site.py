@@ -316,5 +316,42 @@ class AttributeTests(unittest.TestCase):
             self.assertIsNone(entries[F + "triple"]["links"])
 
 
+class CommunityTests(unittest.TestCase):
+    """The community's reviews on the site: per declaration, its threads and its state under every policy."""
+
+    def test_states_threads_and_the_community_page(self):
+        from evidence_core import records as evrec
+        from evidence_core.store import Store, default_config
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            store = Store.init(tmp / "evidence", {**default_config("owner/lib", "Fixture"), "claims": [F + "triple_pos"]})
+            agent = {"kind": "agent", "identity": {"kind": "github", "id": "alice"}, "agent": {"tool": "Claude Code"}}
+            review = lambda n, **x: {"schema": evrec.SCHEMA, "kind": "review", "subject": evrec.subject_from_decl(B.by_name[F + n], B),
+                                      "by": agent, "at": "2026-09-27T10:00:00Z", "origin": {"kind": "issue", "ref": "owner/lib#1"}, **x}
+            [acc] = store.add([review("triple", verdict="accept", rationale="checked", checked={"F3": "checked"})])
+            store.add([{"schema": evrec.SCHEMA, "kind": "comment", "text": "agreed", "links": {"replies_to": acc["id"]},
+                        "by": agent, "at": "2026-09-27T11:00:00Z"}])
+            build(Options(dataset=V / "fixture-b", out=tmp / "site", source=V / "source-b", evidence=tmp / "evidence"))
+            site = json.loads((tmp / "site" / "data" / "site.json").read_text())
+            rows = {r[1]: r for r in json.loads((tmp / "site" / "data" / "decls.json").read_text())}
+            # Reviewed only by an AI agent: uncounted unless the policy counts agents (the first switch).
+            self.assertEqual(rows[F + "triple"][15], "u" * 8 + "c" * 8)
+            self.assertEqual(rows[F + "double"][15], "n" * 16)
+            entries = {e["name"]: e for p in (tmp / "site" / "data" / "m").glob("*.json") for e in json.loads(p.read_text())}
+            kinds = sorted(r["kind"] for r in entries[F + "triple"]["records"])
+            self.assertEqual(kinds, ["comment", "review"])
+            self.assertEqual(entries[F + "triple"]["why"]["0011"], "agents")
+            k = site["community"]["claims"][F + "triple_pos"]
+            self.assertEqual(len(k), 16)
+            self.assertFalse(k[3]["covered"])                               # the default policy: agents not counted
+            self.assertIn(F + "triple", [n for n, _ in site["community"]["queue"][3]])
+            ev = json.loads((tmp / "site" / "data" / "evidence.json").read_text())
+            self.assertEqual(len(ev["records"]), 2)
+            self.assertEqual(site["formOptions"]["categories"]["F3"], "F3 different edge cases")
+            # Without evidence, there is no community mode.
+            build(Options(dataset=V / "fixture-b", out=tmp / "site2"))
+            self.assertIsNone(json.loads((tmp / "site2" / "data" / "site.json").read_text())["community"])
+
+
 if __name__ == "__main__":
     unittest.main()

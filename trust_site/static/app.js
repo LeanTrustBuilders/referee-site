@@ -16,10 +16,37 @@ function number() {
 const modHref = i => `#/m/${i}`;
 const scoped = () => S.scope.mode !== 'full';
 
-/* ---------- the reader's audit: local, keyed by meaning hash ---------- */
+/* ---------- two ways to review ----------
+   Mine: a private review in this browser, as detailed as a published one (verdict, what was wrong,
+   what it was compared with, the failure modes checked, caveats), which can be exported as S3
+   records or submitted to the store. The community's: the store's reviews, people's and AI agents',
+   read by evidence-core, and where each declaration stands under the reader's policy. */
+const MODE_KEY = () => `trust-site:mode:${S.repo}:${S.root}`;
+let mode = 'mine', policy = {...RV.DEFAULT_POLICY};
+const community = () => mode === 'community' && !!S.community;
+function loadMode() {
+  try { mode = localStorage.getItem(MODE_KEY()) || 'mine'; } catch (e) { }
+  if (!S.community) mode = 'mine';
+  policy = RV.loadPolicy(S.issuesRepo || S.repo);
+}
+function setMode(m) {
+  mode = m === 'community' && S.community ? 'community' : 'mine';
+  try { localStorage.setItem(MODE_KEY(), mode); } catch (e) { }
+  coverageCache.clear(); paintMode(); route();
+}
+function paintMode() { document.querySelectorAll('#mode [data-mode]').forEach(b => b.classList.toggle('on', b.dataset.mode === mode)); }
+// Where a declaration stands in the community's reviews, under the reader's policy (evidence-core's).
+const stateOf = row => RV.LETTER[(row[R.STATES] || '')[RV.policyIndex(policy)]] || 'unreviewed';
+
+/* ---------- my review: local, keyed by meaning hash ---------- */
 const AUDIT_KEY = () => `trust-site:${S.repo}:${S.root}`;
 let audit = {decls: {}, exported: null};
-function loadAudit() { try { audit = JSON.parse(localStorage.getItem(AUDIT_KEY())) || audit; } catch (e) { } audit.decls ||= {}; }
+const OLD_VERDICT = {accepted: 'accept', query: 'question'};
+function loadAudit() {
+  try { audit = JSON.parse(localStorage.getItem(AUDIT_KEY())) || audit; } catch (e) { }
+  audit.decls ||= {};
+  for (const a of Object.values(audit.decls)) if (OLD_VERDICT[a.verdict]) a.verdict = OLD_VERDICT[a.verdict];   // before reviews had verdicts of S3's
+}
 function saveAudit() { try { localStorage.setItem(AUDIT_KEY(), JSON.stringify(audit)); } catch (e) { } }
 /* A verdict made before the site's datasets moved to ltb-dataset/1 holds the old meaning hash, which
    the rows still carry: the verdict is moved to the new hash, as the old one would have said. */
@@ -30,22 +57,26 @@ function upgradeVerdict(a, row) {
 }
 function verdictOf(name) {
   const a = audit.decls[name]; const row = byName.get(name);
-  if (!a || !a.verdict) return {verdict: null, stale: false};
+  if (!a || !a.verdict) return {verdict: null, stale: false, ...(a || {})};
   upgradeVerdict(a, row);
-  return {verdict: a.verdict, note: a.note, stale: !!row && a.meaning !== row[R.MEANING], at: a.at};
+  return {...a, stale: !!row && a.meaning !== row[R.MEANING]};
 }
-function setVerdict(name, verdict, note) {
+// Changes some fields of my review of a declaration: verdict, category, reference, checked, caveats,
+// note, involvement.
+function setReview(name, fields) {
   const row = byName.get(name); const cur = audit.decls[name] || {};
-  if (verdict === null && !note) delete audit.decls[name];
-  else audit.decls[name] = {...cur, verdict, note: note ?? cur.note ?? '', meaning: row ? row[R.MEANING] : cur.meaning, at: new Date().toISOString()};
+  const next = {...cur, ...fields};
+  if (!next.verdict && !next.note && !next.reference && !next.caveats && !Object.keys(next.checked || {}).length) delete audit.decls[name];
+  else audit.decls[name] = {...next, meaning: row ? row[R.MEANING] : cur.meaning, at: new Date().toISOString()};
   saveAudit(); coverageCache.clear();
   document.dispatchEvent(new CustomEvent('trust-site:audit', {detail: name}));
 }
-let countPublished = false;
+const setVerdict = (name, verdict, note) => setReview(name, note === undefined ? {verdict} : {verdict, note});
 function accepted(id) {
   const row = D[idIndex.get(id)]; if (!row) return false;
+  if (community()) return stateOf(row) === 'covered';
   const v = verdictOf(row[R.NAME]);
-  return (v.verdict === 'accepted' && !v.stale) || (countPublished && row[R.PUB] > 0);
+  return v.verdict === 'accept' && !v.stale;
 }
 const idIndex = new Map();
 const closureCache = new Map();
@@ -62,11 +93,19 @@ function beneath(id) {
   const r = {total: c.size, accepted: ok, covered: accepted(id) && ok === c.size};
   coverageCache.set(id, r); return r;
 }
+const VERDICT_BADGE = {accept: ['accepted', 'accepted'], problem: ['sorry', 'problem'], question: ['query', 'question']};
+const STATE_BADGE = {covered: 'accepted', uncounted: 'stale', stale: 'stale', problem: 'sorry', disputed: 'sorry'};
 function verdictBadge(name) {
+  if (community()) {
+    const row = byName.get(name), st = row ? stateOf(row) : 'unreviewed';
+    if (st === 'unreviewed') return '<span class="faint" style="font:12px var(--serif)">not yet reviewed</span>';
+    return `<span class="badge ${STATE_BADGE[st]}" title="The community's reviews, under your policy">${esc(RV.STATE_CHIP[st][1])}</span>`;
+  }
   const v = verdictOf(name);
   if (!v.verdict) return '<span class="faint" style="font:12px var(--serif)">unread</span>';
-  if (v.stale) return `<span class="badge stale">${esc(v.verdict)}, then changed</span>`;
-  return `<span class="badge ${v.verdict}">${esc(v.verdict)}</span>`;
+  const [cls, label] = VERDICT_BADGE[v.verdict] || ['', v.verdict];
+  if (v.stale) return `<span class="badge stale">${esc(label)}, then changed</span>`;
+  return `<span class="badge ${cls}">${esc(label)}</span>`;
 }
 
 /* ---------- S3 export and import ---------- */
@@ -79,23 +118,36 @@ function githubLogin() {
   try { localStorage.setItem('trust-site:github', login); } catch (e) { }
   return login;
 }
+// My review as an S3 record (evidence-core's shape): what the store's forms would have recorded.
+function recordOf(d, a, login) {
+  const rec = {schema: 'ltb-evidence/0', kind: 'review', subject: d.subject, verdict: a.verdict,
+    by: {kind: 'person', identity: {kind: 'github', id: login}, ...(a.involvement ? {involvement: a.involvement} : {})},
+    at: a.at, origin: {kind: 'site', ref: location.href.split('#')[0]}};
+  if (a.verdict === 'problem') rec.problem = {category: a.category || 'other'};
+  if (a.reference) { const url = a.reference.match(/https?:\/\/\S+/); rec.reference = {text: a.reference, ...(url ? {url: url[0].replace(/[).,]+$/, '')} : {})}; }
+  const checked = Object.fromEntries(Object.entries(a.checked || {}).filter(([, v]) => v));
+  if (Object.keys(checked).length) rec.checked = checked;
+  if (a.caveats) rec.caveats = a.caveats.split('\n').map(l => l.trim()).filter(Boolean).map(note => {
+    const m = note.match(/^(F\d|naming|other)\s*[:—-]\s*(.*)$/); return m ? {category: m[1], note: m[2]} : {category: 'other', note}; });
+  if (a.note) rec.rationale = a.note;
+  return rec;
+}
 async function exportRecords() {
   const login = githubLogin(); if (!login) return;
-  const out = [];
+  const out = [], skipped = [];
   for (const [name, a] of Object.entries(audit.decls)) {
     if (!a.verdict) continue;
     const d = await declData(name); if (!d) continue;
     upgradeVerdict(a, byName.get(name));
     if (a.meaning !== d.hashes.meaning) continue;   // made on another version: kept locally, not exported as current
+    if (a.verdict === 'problem' && !a.note) { skipped.push(name); continue; }   // a problem needs its why (S3)
     // The declaration's S1 key, as evidence-core wrote it; the record's id is set when it goes into a
     // store (`evidence-store add`), by the same code that checks it.
-    const rec = {schema: 'ltb-evidence/0', kind: 'review', subject: d.subject, verdict: a.verdict === 'accepted' ? 'accept' : 'question',
-      by: {kind: 'person', identity: {kind: 'github', id: login}}, at: a.at, origin: {kind: 'site', ref: location.href.split('#')[0]}};
-    if (a.note) rec.rationale = a.note;
-    out.push(rec);
+    out.push(recordOf(d, a, login));
   }
   const blob = new Blob([out.map(r => JSON.stringify(r)).join('\n') + '\n'], {type: 'application/x-ndjson'});
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${S.root || 'audit'}-reviews.jsonl`; a.click();
+  const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `${S.root || 'audit'}-reviews.jsonl`; link.click();
+  if (skipped.length) alert(`Not exported: ${skipped.length} problem report(s) without a note saying why (${skipped.slice(0, 5).join(', ')}).`);
   audit.exported = new Date().toISOString(); saveAudit(); route();
 }
 function importRecords(file) {
@@ -106,10 +158,12 @@ function importRecords(file) {
       let r; try { r = JSON.parse(line); } catch (e) { continue; }
       if (r.kind !== 'review' || !r.subject) continue;
       const row = byName.get(r.subject.name); if (!row) continue;
-      audit.decls[r.subject.name] = {verdict: r.verdict === 'accept' ? 'accepted' : 'query', note: r.rationale || '',
+      audit.decls[r.subject.name] = {verdict: r.verdict, category: r.problem?.category, note: r.rationale || '',
+        reference: r.reference?.text || '', checked: r.checked || {}, involvement: r.by?.involvement,
+        caveats: (r.caveats || []).map(c => `${c.category}: ${c.note}`).join('\n'),
         meaning: (r.subject.hashes || {}).meaning, at: r.at}; n++;
     }
-    saveAudit(); coverageCache.clear(); alert(`${n} verdicts imported.`); route();
+    saveAudit(); coverageCache.clear(); alert(`${n} reviews imported.`); route();
   });
 }
 function report() {
@@ -117,7 +171,7 @@ function report() {
   const acc = [], q = [], stale = [];
   for (const [name, a] of Object.entries(audit.decls)) {
     const v = verdictOf(name);
-    if (v.stale) stale.push(name); else if (v.verdict === 'accepted') acc.push(name); else if (v.verdict === 'query') q.push([name, a.note]);
+    if (v.stale) stale.push(name); else if (v.verdict === 'accept') acc.push(name); else if (v.verdict === 'question' || v.verdict === 'problem') q.push([name, (v.verdict === 'problem' ? `problem (${a.category || 'other'}): ` : '') + (a.note || '')]);
   }
   const claims = S.claims.claims.filter(c => c.found !== false && byName.has(c.decl));
   if (claims.length) {
@@ -125,40 +179,93 @@ function report() {
     for (const c of claims) { const b = beneath(byName.get(c.decl)[R.ID]); lines.push(`- \`${c.decl}\`${c.label ? ` (${c.label})` : ''}: ${b.covered ? 'covered' : `${b.accepted}/${b.total} beneath accepted`}${verdictOf(c.decl).verdict ? `, ${verdictOf(c.decl).verdict}` : ''}`); }
     lines.push('');
   }
-  lines.push('## Queries', '', ...(q.length ? q.map(([n, note]) => `- \`${n}\`: ${note || '(no note)'}`) : ['None.']), '');
+  lines.push('## Problems and questions', '', ...(q.length ? q.map(([n, note]) => `- \`${n}\`: ${note || '(no note)'}`) : ['None.']), '');
   lines.push(`## Accepted (${acc.length})`, '', ...acc.sort().map(n => `- \`${n}\``), '');
   if (stale.length) lines.push('## Accepted on an earlier version, changed since', '', ...stale.sort().map(n => `- \`${n}\``), '');
   const blob = new Blob([lines.join('\n')], {type: 'text/markdown'});
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${S.root || 'site'}-report.md`; a.click();
 }
 
-/* ---------- the reader's verdict, as a control ---------- */
+/* ---------- my review, as a form ---------- */
+const CHECK_NEXT = {'': 'checked', checked: 'na', na: ''};
+const CHECK_LABEL = {checked: '✓', na: 'n/a', '': ''};
+// My review, submitted to the store: the store's form for its verdict, filled in as far as GitHub lets
+// a link fill a form (not the checkboxes).
+function submitHref(name) {
+  const v = verdictOf(name); if (!v.verdict || !S.forms) return '';
+  const kind = v.verdict === 'accept' ? 'review' : v.verdict;
+  const fields = {decl: name, commit: S.commit};
+  if (kind === 'review') Object.assign(fields, {reference: v.reference || '', caveats: v.caveats || '', rationale: v.note || '',
+    involvement: v.involvement ? (S.formOptions.involvement[v.involvement] || '') : ''});
+  else if (kind === 'problem') Object.assign(fields, {category: S.formOptions.categories[v.category || 'other'] || '', rationale: v.note || ''});
+  else Object.assign(fields, {question: v.note || ''});
+  return RV.formUrl(siteCtx(), kind, name, fields);
+}
 function auditControl(name) {
-  const row = byName.get(name), v = verdictOf(name);
-  return `<div class="audit" data-audit="${esc(name)}"><div class="top"><span><b>Your audit</b><code>${esc(name)}</code></span><span>private to this browser</span></div>
-    <div class="seg"><button data-v="">unread</button><button data-v="accepted">accepted</button><button data-v="query">query</button>
-    ${S.issuesRepo ? `<a class="btn" style="margin-left:auto" target="_blank" rel="noopener" href="https://github.com/${esc(S.issuesRepo)}/issues/new?title=${encodeURIComponent('About ' + name)}&body=${encodeURIComponent(`About \`${name}\` (meaning hash ${row ? row[R.MEANING] : '?'}, commit ${S.commit}):\n\n`)}">Open an issue</a>` : ''}</div>
-    <textarea class="note" placeholder="Note — what you would ask the author">${esc(v.note || '')}</textarea><div class="stale-note">${v.stale ? `You marked this ${esc(v.verdict)} on an earlier version; it has changed since.` : ''}</div></div>`;
+  const v = verdictOf(name);
+  const ck = v.checked || {};
+  return `<div class="audit" data-audit="${esc(name)}"><div class="top"><span><b>My review</b><code>${esc(name)}</code></span><span>private to this browser${S.community ? ' · <a href="#" data-mode="community">the community\'s reviews</a>' : ''}</span></div>
+    <div class="seg"><button data-v="">unread</button><button data-v="accept">accept</button><button data-v="problem">problem</button><button data-v="question">question</button></div>
+    <div class="rv-form"${v.verdict ? '' : ' hidden'}>
+      <label class="rv-cat"${v.verdict === 'problem' ? '' : ' hidden'}>What is wrong <select data-f="category">${Object.entries(RV.CATEGORY).filter(([k]) => k !== 'F8').map(([k, t]) => `<option value="${k}"${v.category === k ? ' selected' : ''}>${k === 'naming' || k === 'other' ? '' : k + ' '}${esc(t)}</option>`).join('')}</select></label>
+      <label class="rv-row${v.verdict === 'accept' ? '' : ' dim'}">Compared with <input data-f="reference" value="${esc(v.reference || '')}" placeholder="the source you checked it against: a book, a paper, a URL"></label>
+      <div class="rv-checks${v.verdict === 'accept' ? '' : ' dim'}"><span class="lbl">What I checked</span>${RV.MODES.map(([c, t]) => `<button data-ck="${c}" class="ck ${ck[c] || 'unset'}" title="${esc(t)}: click for checked, then not applicable, then not checked">${esc(c)}${CHECK_LABEL[ck[c] || ''] ? ' ' + CHECK_LABEL[ck[c]] : ''}</button>`).join('')}</div>
+      <label class="rv-row${v.verdict === 'accept' ? '' : ' dim'}">Caveats <textarea data-f="caveats" rows="2" placeholder="what it holds only with, one per line (e.g. F3: only for nonzero x)">${esc(v.caveats || '')}</textarea></label>
+      <label class="rv-row">I am <select data-f="involvement">${[['', 'not said'], ['outsider', 'an outsider to this library'], ['contributor', 'a contributor'], ['author', 'the author of this declaration']].map(([k, t]) => `<option value="${k}"${(v.involvement || '') === k ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></label>
+    </div>
+    <textarea class="note" data-f="note" placeholder="${v.verdict === 'problem' ? 'What is wrong, and why: a counterexample, the source it disagrees with' : v.verdict === 'question' ? 'The question for the author' : 'Why: what you compared it with, what you checked'}">${esc(v.note || '')}</textarea>
+    <div class="stale-note">${v.stale ? `You reviewed an earlier version; it has changed since.` : ''}</div>
+    ${S.forms ? `<div class="rv-foot"><a class="btn" data-submit target="_blank" rel="noopener" href="${esc(submitHref(name))}"${v.verdict ? '' : ' hidden'}>Submit to the community</a> <span class="muted small">opens the store's form with this review filled in, under your GitHub account${v.verdict === 'accept' ? '; tick what you checked there' : ''}</span></div>` : ''}</div>`;
 }
 function wireAudit(root) {
   root.querySelectorAll('[data-audit]:not([data-wired])').forEach(box => {
     box.dataset.wired = '1';
-    const name = box.dataset.audit, note = $('textarea', box);
+    const name = box.dataset.audit;
+    const redraw = () => { const fresh = document.createElement('div'); fresh.innerHTML = auditControl(name); box.replaceWith(fresh.firstElementChild); wireAudit(root); };
     const paint = () => box.querySelectorAll('[data-v]').forEach(b => b.classList.toggle('on', (verdictOf(name).verdict || '') === b.dataset.v));
     paint();
-    box.querySelectorAll('[data-v]').forEach(b => b.onclick = () => { setVerdict(name, b.dataset.v || null, note.value); paint(); });
-    note.onchange = () => setVerdict(name, verdictOf(name).verdict, note.value);
-    document.addEventListener('trust-site:audit', paint);
+    box.querySelectorAll('[data-v]').forEach(b => b.onclick = () => { setReview(name, {verdict: b.dataset.v || null}); redraw(); });
+    box.querySelectorAll('[data-f]').forEach(f => f.onchange = () => { setReview(name, {[f.dataset.f]: f.value}); const a = box.querySelector('[data-submit]'); if (a) a.href = submitHref(name); });
+    box.querySelectorAll('[data-ck]').forEach(b => b.onclick = () => {
+      const ck = {...(verdictOf(name).checked || {})}; ck[b.dataset.ck] = CHECK_NEXT[ck[b.dataset.ck] || ''];
+      if (!ck[b.dataset.ck]) delete ck[b.dataset.ck];
+      setReview(name, {checked: ck}); redraw(); });
   });
+}
+
+/* ---------- the community's reviews of a declaration ---------- */
+function siteCtx(recs = new Map()) {
+  return {repo: S.issuesRepo, commit: S.commit, forms: S.forms, recs, nameLink: n => declLink(n),
+    isProp: n => { const r = byName.get(n); return !!r && /Theorem|Lemma/.test(r[R.KIND]); }};
+}
+function communityPanel(e, name) {
+  const row = byName.get(name), st = stateOf(row), [cls, label] = RV.STATE_CHIP[st];
+  const records = e.records || [], ctx = siteCtx(new Map(records.map(r => [r.id, r])));
+  const reviews = records.filter(r => r.kind === 'review').sort((a, b) => (b.inForce - a.inForce) || (a.at < b.at ? 1 : -1));
+  const why = st === 'uncounted' ? `<p class="muted small">${esc(RV.WHY[(e.why || {})[RV.policyKey(policy)]] || RV.WHY.policy)}.</p>` : '';
+  const disputed = st === 'disputed' ? `<div class="notice bad">Reviewers disagree: an acceptance and an open problem stand side by side. Read both.</div>` : '';
+  return `<section class="community" id="reviews"><h3>The community's reviews <span class="chip ${cls}" title="Under your policy">${esc(label)}</span> <span class="tally">${RV.tally(reviews)}</span></h3>
+    ${why}${disputed}<p class="muted small">Whose reviews count is your choice: <a href="#/community">your policy</a>. Or <a href="#" data-mode="mine">write my own review</a>, privately.</p>
+    ${reviews.length ? `<details class="cp-checklist" open><summary>What reviewers checked</summary>${RV.checklist(reviews)}</details>` : ''}
+    ${reviews.map(r => RV.thread(ctx, r)).join('') || '<p class="muted">Nobody has reviewed it yet.</p>'}
+    ${RV.reviewButtons(ctx, name)}</section>`;
 }
 
 // The reader's verdicts on a declaration graph: a mark on each node, and the verdict control under
 // each card.
+const STATE_MARK = {covered: {glyph: '✓', color: 'var(--good)'}, uncounted: {glyph: '✓', color: 'var(--muted)'},
+  problem: {glyph: '!', color: 'var(--bad)'}, disputed: {glyph: '!', color: 'var(--bad)'}, stale: {glyph: '~', color: 'var(--warn)'}};
 const AUDIT_GRAPH = {
-  mark: n => { if (!n.audit) return null; const v = verdictOf(n.audit); if (!v.verdict || v.stale) return null;
-    return v.verdict === 'accepted' ? {glyph: '✓', color: 'var(--good)'} : {glyph: '?', color: 'var(--warn)'}; },
-  marks: [['Green ✓, amber ?', 'Your verdicts: accepted, or queried. Neither means unread — or accepted when it meant something else.']],
-  control: n => n.audit ? auditControl(n.audit) : '',
+  mark: n => {
+    if (!n.audit) return null;
+    if (community()) { const row = byName.get(n.audit); return row ? STATE_MARK[stateOf(row)] || null : null; }
+    const v = verdictOf(n.audit); if (!v.verdict || v.stale) return null;
+    return v.verdict === 'accept' ? {glyph: '✓', color: 'var(--good)'} : v.verdict === 'problem' ? {glyph: '!', color: 'var(--bad)'} : {glyph: '?', color: 'var(--warn)'}; },
+  get marks() { return community()
+    ? [['Marks', "The community's reviews, under your policy: green ✓ reviewed; grey ✓ reviewed, but not by anyone your policy counts; red ! an open problem; amber ~ reviewed only in an earlier version; none, not yet reviewed."]]
+    : [['Green ✓, red !, amber ?', 'My reviews: accepted, a problem, a question. None means unread — or accepted when it meant something else.']]; },
+  control: n => !n.audit ? '' : community()
+    ? `<p class="muted small">${verdictBadge(n.audit)} <a href="${declHref(n.audit)}">its reviews</a></p>` : auditControl(n.audit),
   wire: root => wireAudit(root),
 };
 // The card of a node of a declaration graph: a declaration of the site, or an upstream constant.
@@ -169,10 +276,10 @@ async function nodeCard(n) {
 }
 
 /* ---------- pages ---------- */
-const PAGES = [['changes', 'Changes'], ['claims', 'Claims'], ['theorems', 'Theorems'], ['specifications', 'Specifications'], ['browse', 'Browse'], ['sorries', 'Sorries']];
+const PAGES = [['changes', 'Changes'], ['claims', 'Claims'], ['theorems', 'Theorems'], ['specifications', 'Specifications'], ['browse', 'Browse'], ['sorries', 'Sorries'], ['community', 'Community']];
 function pagesShown() {
   return PAGES.filter(([k]) => k !== 'changes' || S.changes).filter(([k]) => k !== 'claims' || S.claims.claims.length)
-    .filter(([k]) => k !== 'specifications' || S.hasSpecs);
+    .filter(([k]) => k !== 'specifications' || S.hasSpecs).filter(([k]) => k !== 'community' || S.community);
 }
 function pager(prev, next) {
   return `<div class="pager"><span>${prev ? `<a href="${prev[0]}">← ${esc(prev[1])}</a>` : ''}</span><span>${next ? `<a href="${next[0]}">${esc(next[1])} →</a>` : ''}</span></div>`;
@@ -261,6 +368,7 @@ function renderHome() {
   let h = pagerFor('#/') + `<h1 style="text-align:center">${esc(S.title)}</h1>` + scopeNotice();
   const proved = c.sorry === 0 ? `All of them are proved with no <code>sorry</code> anywhere.` : `${plural(c.sorry, 'of them depends', 'of them depend')} on a <code>sorry</code> (see <a href="#/sorries">Sorries</a>).`;
   const leftOut = S.scope.mode === 'full' && c.deprecated > c.deprecatedShown ? ` <span class="muted">${plural(c.deprecated - c.deprecatedShown, 'deprecated declaration is', 'deprecated declarations are')} left out: kept only so that older code compiles.</span>` : '';
+  if (S.community) h += `<div class="notice">Two ways to review here: <b>mine</b>, private to this browser, and <b>the community's</b>, ${plural(S.community.records, 'record')} by people and AI agents in the evidence store. You are reading ${community() ? "the community's" : 'your own'}; switch in the side bar, and see <a href="#/community">the community's reviews</a>.</div>`;
   h += `<p class="lead"><code>${esc(S.root)}</code> has ${plural(c.decls, 'declaration')}: <a href="#/theorems">${plural(c.theorems, 'theorem')}</a>, ${plural(c.lemmas, 'lemma')} and ${plural(c.definitions, 'definition')}. ${proved} ${kernelSentence()}${leftOut}</p>`;
   const cl = S.claims;
   if (cl.claims.length) {
@@ -325,11 +433,10 @@ async function renderDecl(name) {
     if (e.edited && b.date && e.edited.date > b.date) p += ` File edited ${esc(e.edited.date)} without changing what it means.`;
     h += `<p class="muted" style="font-size:14px">${p}</p>`;
   } else if (e.edited) h += `<p class="muted" style="font-size:14px">File last edited ${esc(e.edited.date)}.</p>`;
-  if (e.reviews.length) h += `<h3>Published reviews</h3>` + e.reviews.map(r => `<div class="review ${esc(r.status)}${r.inForce ? '' : ' faded'}"><b>${esc(r.verdict)}</b> by ${esc(r.by.label || 'someone')}${r.by.kind === 'agent' ? ' (AI agent)' : ''}, ${esc((r.at || '').slice(0, 10))} — <span class="muted">${esc(r.status)}${r.inForce ? '' : r.supersededBy ? ', superseded' : `, ${esc(r.state)}`}</span>${r.url ? ` · <a href="${esc(r.url)}">thread</a>` : ''}${r.rationale ? `<div>${md(r.rationale, true)}</div>` : ''}</div>`).join('');
-  h += auditControl(name);
+  h += community() ? communityPanel(e, name) : auditControl(name);
   const b = beneath(row[R.ID]);
   h += `<h3>Dependency graph</h3><div class="graph" id="dg"></div>`;
-  h += `<p><b>Audit surface:</b> ${plural(row[R.DEPS], 'project declaration')}, ${plural(row[R.EXT], 'external constant')}. ${b.total ? `${b.accepted}/${b.total} beneath accepted${b.covered ? ' — covered' : ''}.` : ''}</p>`;
+  h += `<p><b>Audit surface:</b> ${plural(row[R.DEPS], 'project declaration')}, ${plural(row[R.EXT], 'external constant')}. ${b.total ? `${b.accepted}/${b.total} beneath ${community() ? 'reviewed by the community' : 'accepted'}${b.covered ? ' — covered' : ''}.` : ''}</p>`;
   if (e.outside?.length) h += `<p class="muted">Outside this scoped site: ${e.outside.map(x => `<code>${esc(x)}</code>`).join(', ')}.</p>`;
   if (e.external.length) h += `<details><summary class="muted">The external constants its statement rests on</summary><ul>${e.external.map(([n, p, k]) => `<li><code data-c="${esc(n)}">${esc(n)}</code> <span class="muted">${esc(p)} · ${esc(k)}</span></li>`).join('')}</ul></details>`;
   h += e.sorry ? `<p>✗ <b>Not proved:</b> ${e.ownSorry ? 'it contains a <code>sorry</code> itself' : `it rests on a <code>sorry</code>, through ${e.sorryVia.map(x => declLink(x)).join(', ')}`}.</p>` : `<p>✓ <b>Proved:</b> no <code>sorry</code> anywhere in its closure${e.axioms.length ? `, but it rests on the axioms ${e.axioms.map(a => `<code>${esc(a)}</code>`).join(', ')}` : ''}.</p>`;
@@ -339,7 +446,9 @@ async function renderDecl(name) {
   h += pager(prev, next);
   return [h, () => {
     wireAudit($('#main'));
-    document.onkeydown = ev => { if (ev.target.tagName === 'TEXTAREA' || ev.target.tagName === 'INPUT') return; const m = {a: 'accepted', q: 'query', u: null}; if (ev.key in m) setVerdict(name, m[ev.key], ($('[data-audit] textarea') || {}).value); };
+    // My review from the keyboard: a accept, p problem, q question, u unread.
+    document.onkeydown = ev => { if (community() || ['TEXTAREA', 'INPUT', 'SELECT'].includes(ev.target.tagName)) return; const m = {a: 'accept', p: 'problem', q: 'question', u: null};
+      if (ev.key in m) { setVerdict(name, m[ev.key]); const box = $('[data-audit]'); if (box) { const fresh = document.createElement('div'); fresh.innerHTML = auditControl(name); box.replaceWith(fresh.firstElementChild); wireAudit($('#main')); } } };
     const ids = [row[R.ID], ...closure(row[R.ID])];
     if (ids.length > 600) { $('#dg').innerHTML = `<p class="muted">${plural(ids.length, 'declaration')}: too many to draw.</p>`; return; }
     const nodes = ids.map(i => { const r = D[idIndex.get(i)]; return {id: i, label: r[R.NAME].split('.').pop(), title: r[R.NAME], kind: r[R.KIND], href: declHref(r[R.NAME]), summary: r[R.SUMMARY], root: i === row[R.ID], sorry: r[R.SORRY] > 0, audit: r[R.NAME]}; });
@@ -367,7 +476,7 @@ async function renderDecl(name) {
 
 function rowCard(r, extra = '') {
   const b = beneath(r[R.ID]);
-  return `<div class="rowcard"><div class="h"><a href="${declHref(r[R.NAME])}">${esc(r[R.NAME])}</a><span class="meta">${b.accepted}/${b.total} beneath accepted</span>${verdictBadge(r[R.NAME])}${r[R.SORRY] ? '<span class="badge sorry">sorry</span>' : ''}${r[R.CHANGE] ? `<span class="badge ${r[R.CHANGE]}">${CHANGE_LABEL[r[R.CHANGE]]}</span>` : ''}</div>${extra}${r[R.SUMMARY] ? `<div class="d clamp">${md(r[R.SUMMARY], true)}</div>` : ''}</div>`;
+  return `<div class="rowcard"><div class="h"><a href="${declHref(r[R.NAME])}">${esc(r[R.NAME])}</a><span class="meta">${b.accepted}/${b.total} beneath ${community() ? 'reviewed' : 'accepted'}</span>${verdictBadge(r[R.NAME])}${r[R.SORRY] ? '<span class="badge sorry">sorry</span>' : ''}${r[R.CHANGE] ? `<span class="badge ${r[R.CHANGE]}">${CHANGE_LABEL[r[R.CHANGE]]}</span>` : ''}</div>${extra}${r[R.SUMMARY] ? `<div class="d clamp">${md(r[R.SUMMARY], true)}</div>` : ''}</div>`;
 }
 function renderClaims() {
   const cl = S.claims;
@@ -397,8 +506,7 @@ function renderTheorems() {
   let h = pagerFor('#/theorems') + `<h1>The Theorems This Library States</h1>` + scopeNotice() +
     `<p>These are the declarations written with the <code>theorem</code> keyword, as opposed to <code>lemma</code>. The distinction is the author's own: by the usual convention a <code>theorem</code> is a result worth stating for its own sake, while a <code>lemma</code> is a step towards one. <b>So this list is only as good as the library's discipline about the two keywords.</b></p>
     <p>${th.length} of ${D.length.toLocaleString('en')} declarations are stated as theorems, ranked within each chapter by how much machinery they rest on.</p>
-    <p>Against each one is what you have made of it. A declaration is <i>accepted</i> when you have read it and judged that it says what its name claims — and <i>covered</i> when, in addition, every declaration its statement rests on is accepted too. The gap between those two is the point: accepting a theorem whose definitions you have not read accepts a sentence, not a theorem.</p>`;
-  if (S.evidence) h += `<p><label><input type="checkbox" id="pub" ${countPublished ? 'checked' : ''}> Count published reviews (${S.evidence.records}) as accepted</label></p>`;
+    <p>${community() ? `Against each one is where it stands in the community's reviews, under <a href="#/community">your policy</a>: <i>reviewed</i> when a review your policy counts accepts it — and <i>covered</i> when, in addition, every declaration its statement rests on is reviewed too.` : `Against each one is what you have made of it. A declaration is <i>accepted</i> when you have read it and judged that it says what its name claims — and <i>covered</i> when, in addition, every declaration its statement rests on is accepted too.`} The gap between those two is the point: accepting a theorem whose definitions nobody has read accepts a sentence, not a theorem.</p>`;
   for (const ch of S.chapters) {
     const mods = new Set(ch.modules), rows = th.filter(r => mods.has(r[R.MOD])).sort((a, b) => b[R.DEPS] - a[R.DEPS]);
     if (rows.length) h += `<details class="group" open><summary>${esc(ch.title)}</summary>${rows.map(r => rowCard(r)).join('')}</details>`;
@@ -407,17 +515,23 @@ function renderTheorems() {
   const target = claimRows.length ? claimRows : th;
   const covered = target.filter(r => beneath(r[R.ID]).covered).length;
   const acc = D.filter(r => accepted(r[R.ID])).length;
-  const queries = Object.entries(audit.decls).filter(([n, a]) => a.verdict === 'query' && byName.has(n));
-  h += `<hr><h2>Your progress</h2><div class="progress"><h3>${covered} of ${target.length} ${claimRows.length ? 'claims' : 'theorems'} fully covered</h3><div>${acc} of ${D.length.toLocaleString('en')} declarations accepted · ${queries.length} queries open</div><div class="muted" style="font-size:13px">${audit.exported ? `Last exported ${esc(audit.exported.slice(0, 16).replace('T', ' '))}.` : 'Not yet exported.'} This state lives in this browser only.</div></div>
+  const queries = Object.entries(audit.decls).filter(([n, a]) => (a.verdict === 'question' || a.verdict === 'problem') && byName.has(n));
+  if (community()) {
+    const open = D.filter(r => ['problem', 'disputed'].includes(stateOf(r)));
+    h += `<hr><h2>The community's progress</h2><div class="progress"><h3>${covered} of ${target.length} ${claimRows.length ? 'claims' : 'theorems'} fully covered</h3><div>${acc} of ${D.length.toLocaleString('en')} declarations reviewed · ${open.length} with an open problem</div><div class="muted" style="font-size:13px">Under your policy; <a href="#/community">what to review next</a>.</div></div>`;
+    const notCov = D.filter(r => accepted(r[R.ID]) && !beneath(r[R.ID]).covered);
+    h += `<hr><h2>Reviewed, but not covered</h2><p>Reviewed while something their statements rest on is not.</p>${notCov.length ? notCov.map(r => rowCard(r)).join('') : '<p>None.</p>'}`;
+    return h;
+  }
+  h += `<hr><h2>My progress</h2><div class="progress"><h3>${covered} of ${target.length} ${claimRows.length ? 'claims' : 'theorems'} fully covered</h3><div>${acc} of ${D.length.toLocaleString('en')} declarations accepted · ${queries.length} problems and questions</div><div class="muted" style="font-size:13px">${audit.exported ? `Last exported ${esc(audit.exported.slice(0, 16).replace('T', ' '))}.` : 'Not yet exported.'} This state lives in this browser only.</div></div>
     <div class="buttons"><button class="btn" id="exp">Export reviews (S3)</button><label class="btn">Import…<input type="file" id="imp" accept=".jsonl,.json" hidden></label><button class="btn" id="rep">Generate report</button><button class="btn" id="clr">Clear all</button></div>`;
-  h += `<hr><h2>Open queries</h2>${queries.length ? queries.map(([n, a]) => `<p>${declLink(n)}: ${esc(a.note || '(no note)')}</p>`).join('') : '<p>None.</p>'}`;
+  h += `<hr><h2>My problems and questions</h2>${queries.length ? queries.map(([n, a]) => `<p>${declLink(n)} <span class="muted">${a.verdict === 'problem' ? `problem (${esc(a.category || 'other')})` : 'question'}</span>: ${esc(a.note || '(no note)')}</p>`).join('') : '<p>None.</p>'}`;
   const notCovered = D.filter(r => accepted(r[R.ID]) && !beneath(r[R.ID]).covered);
   h += `<hr><h2>Accepted, but not covered</h2><p>Accepted while something their statements rest on is not. This list is the reason a bare checkbox is not enough: every row is a declaration you would otherwise count as done.</p>${notCovered.length ? notCovered.map(r => rowCard(r)).join('') : '<p>None.</p>'}`;
   return [h, () => {
     $('#exp').onclick = exportRecords; $('#rep').onclick = report;
     $('#imp').onchange = ev => ev.target.files[0] && importRecords(ev.target.files[0]);
     $('#clr').onclick = () => { if (confirm('Forget every verdict and note on this site?')) { audit = {decls: {}, exported: null}; saveAudit(); coverageCache.clear(); route(); } };
-    const pub = $('#pub'); if (pub) pub.onchange = () => { countPublished = pub.checked; coverageCache.clear(); route(); };
   }];
 }
 async function renderSpecifications() {
@@ -440,7 +554,7 @@ async function renderSpecifications() {
 }
 function renderBrowse() {
   let h = pagerFor('#/browse') + `<h1>Browse</h1>` + scopeNotice() + `<p>Every one of the ${D.length.toLocaleString('en')} exposed declarations. Sort by any column, and filter by kind, chapter, status, revision status, verdict, or name.</p><p>“Deps” counts the project declarations in a declaration's closure and “External” the distinct constants outside the project it bottoms out in — together, how much a reader must accept in order to believe it. Sorting by them ascending finds the results that are cheapest to audit.</p>
-  <div class="filters"><input id="bq" placeholder="Filter by name or module"><select id="bk"><option value="">Any kind</option>${[...new Set(D.map(r => r[R.KIND]))].sort().map(k => `<option>${esc(k)}</option>`).join('')}</select><select id="bc"><option value="">Any chapter</option>${S.chapters.map(c => `<option value="${c.id}">${esc(c.title)}</option>`).join('')}</select><select id="bs"><option value="">Any status</option><option value="sorry">rests on a sorry</option><option value="proved">proved</option></select>${S.changes ? `<select id="br"><option value="">Any revision status</option><option value="reread">needs re-reading</option>${Object.entries(CHANGE_LABEL).filter(([k]) => k !== 'removed').map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>` : ''}<select id="bv"><option value="">Any verdict</option><option value="unread">unread</option><option value="accepted">accepted</option><option value="query">query</option><option value="covered">covered</option></select><button class="btn" id="breset">Reset</button></div>
+  <div class="filters"><input id="bq" placeholder="Filter by name or module"><select id="bk"><option value="">Any kind</option>${[...new Set(D.map(r => r[R.KIND]))].sort().map(k => `<option>${esc(k)}</option>`).join('')}</select><select id="bc"><option value="">Any chapter</option>${S.chapters.map(c => `<option value="${c.id}">${esc(c.title)}</option>`).join('')}</select><select id="bs"><option value="">Any status</option><option value="sorry">rests on a sorry</option><option value="proved">proved</option></select>${S.changes ? `<select id="br"><option value="">Any revision status</option><option value="reread">needs re-reading</option>${Object.entries(CHANGE_LABEL).filter(([k]) => k !== 'removed').map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>` : ''}<select id="bv"><option value="">${community() ? 'Any review state' : 'Any verdict'}</option>${community() ? Object.entries(RV.STATE_CHIP).map(([k, [, t]]) => `<option value="${k}">${esc(t)}</option>`).join('') : '<option value="unread">unread</option><option value="accept">accepted</option><option value="problem">problem</option><option value="question">question</option>'}<option value="beneath">covered, with all beneath</option></select><button class="btn" id="breset">Reset</button></div>
   <p class="muted" id="bcount"></p><div class="tablewrap"><table class="grid"><thead><tr><th data-c="name">Declaration</th><th data-c="kind">Kind</th><th data-c="mod">Module</th><th data-c="deps">Deps</th><th data-c="ext">External</th>${S.changes ? '<th data-c="change">Changed</th>' : ''}<th data-c="verdict">Verdict</th></tr></thead><tbody id="bt"></tbody></table></div>`;
   return [h, () => {
     let sort = ['name', 1];
@@ -449,8 +563,8 @@ function renderBrowse() {
       const q = $('#bq').value.trim().toLowerCase(), k = $('#bk').value, c = $('#bc').value, s = $('#bs').value, rv = $('#br')?.value || '', v = $('#bv').value;
       let rows = D.filter(r => (!q || r[R.NAME].toLowerCase().includes(q) || (S.modules[r[R.MOD]]?.short || '').toLowerCase().includes(q)) && (!k || r[R.KIND] === k) && (!c || chOf(r) === c)
         && (!s || (s === 'sorry') === !!r[R.SORRY]) && (!rv || (rv === 'reread' ? ['statement', 'body', 'underneath', 'added', 'renamed'].includes(r[R.CHANGE]) : r[R.CHANGE] === rv))
-        && (!v || (v === 'covered' ? beneath(r[R.ID]).covered : v === 'unread' ? !verdictOf(r[R.NAME]).verdict : verdictOf(r[R.NAME]).verdict === v)));
-      const key = {name: r => r[R.NAME], kind: r => r[R.KIND], mod: r => S.modules[r[R.MOD]]?.short || '', deps: r => r[R.DEPS], ext: r => r[R.EXT], change: r => r[R.CHANGE], verdict: r => verdictOf(r[R.NAME]).verdict || ''}[sort[0]];
+        && (!v || (v === 'beneath' ? beneath(r[R.ID]).covered : community() ? stateOf(r) === v : v === 'unread' ? !verdictOf(r[R.NAME]).verdict : verdictOf(r[R.NAME]).verdict === v)));
+      const key = {name: r => r[R.NAME], kind: r => r[R.KIND], mod: r => S.modules[r[R.MOD]]?.short || '', deps: r => r[R.DEPS], ext: r => r[R.EXT], change: r => r[R.CHANGE], verdict: r => community() ? stateOf(r) : verdictOf(r[R.NAME]).verdict || ''}[sort[0]];
       rows.sort((a, b) => { const x = key(a), y = key(b); return (x < y ? -1 : x > y ? 1 : 0) * sort[1]; });
       $('#bcount').textContent = `${rows.length.toLocaleString('en')} declarations${rows.length > 800 ? ' — showing the first 800, narrow the filter to see the rest' : ''}`;
       $('#bt').innerHTML = rows.slice(0, 800).map(r => `<tr><td class="n"><a href="${declHref(r[R.NAME])}">${esc(r[R.NAME])}</a></td><td class="k">${esc(r[R.KIND])}</td><td class="mod">${esc(S.modules[r[R.MOD]]?.short || '')}</td><td class="num">${r[R.DEPS]}</td><td class="num">${r[R.EXT]}</td>${S.changes ? `<td>${r[R.CHANGE] ? `<span class="badge ${r[R.CHANGE]}">${CHANGE_LABEL[r[R.CHANGE]]}</span>` : '<span class="faint">—</span>'}</td>` : ''}<td>${verdictBadge(r[R.NAME])}</td></tr>`).join('');
@@ -459,6 +573,30 @@ function renderBrowse() {
     $('#breset').onclick = () => { document.querySelectorAll('.filters input, .filters select').forEach(x => x.value = ''); draw(); };
     document.querySelectorAll('th[data-c]').forEach(th => th.onclick = () => { sort = [th.dataset.c, sort[0] === th.dataset.c ? -sort[1] : 1]; draw(); });
     draw();
+  }];
+}
+async function renderCommunity() {
+  if (!S.community) return notFound('community');
+  const ev = await getJSON('data/evidence.json');
+  const ctx = siteCtx(new Map(ev.records.map(r => [r.id, r])));
+  const i = RV.policyIndex(policy);
+  let h = pagerFor('#/community') + `<h1>The community's reviews</h1>` + scopeNotice() +
+    `<p>People and AI agents review this library's declarations in its evidence store${S.issuesRepo ? `, <a href="https://github.com/${esc(S.issuesRepo)}">${esc(S.issuesRepo)}</a>` : ''}: ${plural(S.community.records, 'record')} so far, each under a GitHub account. Where each declaration stands, and what counts as reviewed, depends on whose reviews you count.</p>` +
+    `<div class="notice">You are ${community() ? "reading the community's reviews: every badge and count on this site is theirs, under your policy" : 'reading your own reviews'}. <button class="btn" data-mode="${community() ? 'mine' : 'community'}">${community() ? 'Show my reviews instead' : "Show the community's instead"}</button></div>`;
+  h += RV.policyPanel(policy);
+  const claims = S.claims.claims.filter(c => c.found !== false && byName.has(c.decl));
+  if (claims.length) {
+    h += `<section id="claims-coverage"><h2>The claims</h2><ul class="cov">${claims.map(c => {
+      const k = (S.community.claims[c.decl] || [])[i]; if (!k) return '';
+      return `<li>${declLink(c.decl)}${c.label ? ` <span class="muted">${esc(c.label)}</span>` : ''}: ${k.covered ? '<span class="chip good">covered</span>' : `<b>${k.reviewed} of ${k.members}</b> declarations it rests on reviewed`}${k.problems ? ` · <span class="chip bad">${plural(k.problems, 'open problem')}</span>` : ''}</li>`;
+    }).join('')}</ul><p class="muted small">Under your policy. A claim is covered when every declaration its statement rests on has a review that counts, and none has an open problem.</p></section>`;
+  }
+  const next = S.community.queue[i] || [];
+  h += `<section id="next"><h2>Review next</h2>${claims.length ? (next.length ? `<p class="muted">What the claims rest on that no review your policy counts covers yet, those more claims rest on first.</p><ol>${next.map(([n, w]) => `<li>${declLink(n)} <span class="muted">— ${verdictBadge(n)}${w > 1 ? ` · ${w} claims rest on it` : ''}</span></li>`).join('')}</ol>` : '<p class="muted">Nothing: everything the claims rest on is reviewed.</p>') : '<p class="muted">The project names no claims, so there is no order to review in: pick from <a href="#/theorems">Theorems</a>.</p>'}</section>`;
+  h += RV.reviewers(ev.records) + RV.activity(ctx, ev.records, id => { const r = ctx.recs.get(id); return r ? `${declHref(r.decl)}` : '#'; });
+  return [h, () => {
+    $('#main').querySelectorAll('[data-p]').forEach(x => x.onchange = () => { policy[x.dataset.p] = x.checked; RV.savePolicy(S.issuesRepo || S.repo, policy); coverageCache.clear(); route(); });
+    RV.wireActivity($('#main'));
   }];
 }
 function renderSorries() {
@@ -561,6 +699,11 @@ function frame() {
   const applyTheme = () => { if (t === 'auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t; $('#theme').textContent = `Theme: ${t}`; };
   applyTheme(); $('#theme').onclick = () => { t = themes[(themes.indexOf(t) + 1) % 3]; try { localStorage.setItem('trust-site:theme', t); } catch (e) { } applyTheme(); };
   $('#menu').onclick = () => $('#side').classList.toggle('open');
+  if (S.community) {
+    const box = document.createElement('div'); box.id = 'mode'; box.className = 'mode-switch';
+    box.innerHTML = `<span>Reviews</span><button data-mode="mine" title="My own review, private to this browser">mine</button><button data-mode="community" title="The community's reviews, from the evidence store">community</button>`;
+    $('#theme').after(box); paintMode();
+  }
 }
 async function route() {
   const hash = decodeURIComponent(location.hash.slice(1) || '/'); const [, a, ...rest] = hash.split('/'); const b = rest.join('/');
@@ -569,7 +712,7 @@ async function route() {
   try {
     r = a === '' || a === undefined ? renderHome() : a === 'claims' ? renderClaims() : a === 'theorems' ? renderTheorems()
       : a === 'specifications' ? await renderSpecifications() : a === 'browse' ? renderBrowse() : a === 'sorries' ? renderSorries()
-      : a === 'changes' ? renderChanges() : a === 'c' ? renderChapter(b) : a === 'm' ? await renderModule(+b) : a === 'd' ? await renderDecl(b) : notFound();
+      : a === 'changes' ? renderChanges() : a === 'community' ? await renderCommunity() : a === 'c' ? renderChapter(b) : a === 'm' ? await renderModule(+b) : a === 'd' ? await renderDecl(b) : notFound();
   } catch (e) { r = `<h1>Error</h1><pre>${esc(e.stack || e)}</pre>`; }
   const [html, after] = Array.isArray(r) ? r : [r, null];
   const main = $('#main'); main.innerHTML = html; typeset(main); if (after) after(); applyExpanded();
@@ -581,7 +724,8 @@ async function start() {
   [S, D, G] = await Promise.all([getJSON('data/site.json'), getJSON('data/decls.json'), getJSON('data/graph.json')]);
   D.forEach((r, i) => { byName.set(r[R.NAME], r); idIndex.set(r[R.ID], i); });
   S.hasSpecs = Object.values(S.pins || {}).some(p => p.pinned);
-  number(); loadAudit(); frame(); setupSearch(); setupTips();
+  number(); loadAudit(); loadMode(); frame(); setupSearch(); setupTips();
+  document.addEventListener('click', ev => { const m = ev.target.closest('[data-mode]'); if (m) { ev.preventDefault(); setMode(m.dataset.mode); } });
   document.addEventListener('click', ev => { if (ev.target.closest('.expand-btn')) { expanded = !expanded; try { localStorage.setItem('trust-site:expanded', expanded ? '1' : '0'); } catch (e) { } applyExpanded(); } });
   window.addEventListener('hashchange', route); route();
 }

@@ -32,6 +32,8 @@ from evidence_core import ledger as ledger_mod
 from evidence_core import records as evrec
 from evidence_core.changes import compare
 from evidence_core.checks import kernel_notions, kernel_summary
+from evidence_core.coverage import UNCOUNTED, all_policies, coverage as coverage_of, policy_key, queue as queue_of
+from evidence_store.forms import CATEGORIES as FORM_CATEGORIES, INVOLVEMENT as FORM_INVOLVEMENT
 from evidence_core.pins import Pins
 from evidence_store.forms import FORMS as STORE_FORMS
 from evidence_core.source import Sources, split_statement
@@ -39,6 +41,10 @@ from evidence_core.store import Store
 from evidence_core.views import views_on
 
 STATIC = Path(__file__).parent / "static"
+#: Where a declaration stands under a policy (evidence-core's decl_state), one letter each, in the
+#: order of all_policies(): a policy's index is its key read in binary.
+STATE_LETTER = {"covered": "c", "uncounted": "u", "stale": "s", "unreviewed": "n", "problem": "p", "disputed": "d"}
+POLICIES = all_policies()
 
 
 @dataclass
@@ -192,6 +198,10 @@ def build(opt: Options) -> dict:
     changes = compare(ds, base, scope_names={d.name for d in scope}) if base else None
     ev = load_evidence(opt.evidence, ds, base, store)
     reviews = {name: views_on(ev, name, "review") for name in ev.by_decl if views_on(ev, name, "review")} if ev else {}
+    # The community's reviews: each declaration's threads (reviews, and the comments replying to them),
+    # and where it stands under each policy a reader can choose, as evidence-core decides.
+    threads = {name: rs + views_on(ev, name, "comment") for name, rs in reviews.items()}
+    states = (lambda name: "".join(STATE_LETTER[ev.decl_state(name, p)] for p in POLICIES)) if ev else (lambda name: "")
     # What pins each definition down: in the code, from reviewers, wanted (evidence-core's pins).
     pins = Pins(ds, ev)
 
@@ -215,7 +225,7 @@ def build(opt: Options) -> dict:
                      sum(1 for r in reviews.get(d.name, []) if r["verdict"] == "accept" and r["inForce"] and r["applies"]),
                      hist[d.name][-1][0] if d.name in hist else -1, hist[d.name][0][0] if d.name in hist else -1,
                      # ltb-dataset/1: the meaning hash of ltb-dataset/0, which audits made before hold.
-                     d.legacy_meaning or ""])
+                     d.legacy_meaning or "", states(d.name)])
         srow = source_rows.get(d.name, [None])[0]
         text = src.text(srow) if srow else None
         code, proof = split_statement(text) if text else ("", "")
@@ -240,7 +250,10 @@ def build(opt: Options) -> dict:
             "links": docs_mod.links(ds, d.name, resolver).as_json() or None,
             "axioms": analysis.extra_axioms(ds, d.name),
             "change": changes.detail.get(d.name) if changes else None,
-            "reviews": reviews.get(d.name, []),
+            "records": threads.get(d.name, []),
+            # Why current acceptances do not count, under the policies where they do not.
+            "why": {policy_key(p): ev.why_uncounted(d.name, p) for p in POLICIES
+                    if ev.decl_state(d.name, p) == UNCOUNTED} if ev and d.name in reviews else {},
             "claim": claim_by_decl[d.name].as_json() if d.name in claim_by_decl else None,
             "specifies": ann["specifies"].get(d.name, []),
             "pins": pins.of(d.name) if not d.is_prop else [],
@@ -353,6 +366,16 @@ def build(opt: Options) -> dict:
         # The evidence store's issue forms, when the site has a store (evidence-store's names).
         "forms": {kind: form["file"] for kind, form in STORE_FORMS.items()} if store is not None else None,
         "evidence": {"records": sum(len(v) for v in reviews.values())} if reviews else None,
+        # Community reviews: per claim, its coverage under each policy; per policy, what to review next.
+        "community": {
+            "records": sum(len(v) for v in threads.values()),
+            "claims": {c: [{"covered": cov.is_covered, "members": len(cov.members), "reviewed": len(cov.covered),
+                            "problems": len(cov.with_problems)} for cov in (coverage_of(ev, c, p) for p in POLICIES)]
+                       for c in cl.names},
+            "queue": [[[d.name, w] for d, w in queue_of(ev, cl.names, p, limit=40)] if cl.names else [] for p in POLICIES],
+        } if ev else None,
+        # How the store's forms name their options, for prefilling them (evidence-store's).
+        "formOptions": {"categories": dict(FORM_CATEGORIES), "involvement": dict(FORM_INVOLVEMENT)},
         "kernel": {n: kernel_summary(ds, n, [d.name for d in scope]).as_json() for n in kernel_rows},
         "ledger": {"builds": led["builds"]} if led["builds"] else None,
         "tipShards": tip_shards,
@@ -367,6 +390,11 @@ def build(opt: Options) -> dict:
     shutil.copy(STATIC / "index.html", out / "index.html")
     compact = {"ensure_ascii": False, "separators": (",", ":")}
     (out / "data" / "site.json").write_text(json.dumps(site, **compact), encoding="utf-8")
+    if ev:
+        # Every record of the community's reviews, for the Community page (activity, reviewers).
+        records = sorted((r for rs in threads.values() for r in rs), key=lambda r: r["at"], reverse=True)
+        (out / "data" / "evidence.json").write_text(json.dumps({"records": records, "maintainers": store.config.get(
+            "maintainers", []) if store is not None else []}, **compact), encoding="utf-8")
     (out / "data" / "decls.json").write_text(json.dumps(rows, **compact), encoding="utf-8")
     graph = {str(d.id): [t for t in meaning.get(d.id, ()) if t in scope_set] for d in scope}
     (out / "data" / "graph.json").write_text(json.dumps(graph, **compact), encoding="utf-8")
