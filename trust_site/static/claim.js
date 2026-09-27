@@ -14,7 +14,7 @@ const MODES = [['F1', 'the intended object'], ['F2', 'conventions'], ['F3', 'edg
 const CATEGORY = {F1: 'a different object', F2: 'a different convention', F3: 'different edge cases', F4: 'a junk value',
   F5: 'vacuous or trivial', F6: 'an arbitrary choice', F7: 'something wrong underneath', F8: 'drift', F9: 'less general than the source',
   naming: 'a misleading name or docstring', other: 'something else'};
-const TITLE = {review: 'Review: ', problem: 'Problem: ', question: 'Question: ', status: 'Status: '};
+const TITLE = {review: 'Review: ', problem: 'Problem: ', question: 'Question: ', status: 'Status: ', challenge: 'Challenge: ', test: 'Test: '};
 const STATE = {open: 'open', fixed: 'fixed', intended: 'intended as it is', invalid: 'not a problem', answered: 'answered',
   withdrawn: 'withdrawn', reopened: 'reopened'};
 
@@ -87,6 +87,8 @@ function actions(n) {
     <a class="btn good" target="_blank" rel="noopener" href="${formUrl('review', n)}">Review</a>
     <a class="btn bad" target="_blank" rel="noopener" href="${formUrl('problem', n)}">Report a problem</a>
     <a class="btn" target="_blank" rel="noopener" href="${formUrl('question', n)}">Ask a question</a>
+    ${E.forms.challenge && !(entries.get(n) || {}).isProp ? `<a class="btn" target="_blank" rel="noopener" href="${formUrl('challenge', n)}">Propose a test</a>` : ''}
+    ${E.forms.test && !(entries.get(n) || {}).isProp ? `<a class="btn" target="_blank" rel="noopener" href="${formUrl('test', n)}">List a test</a>` : ''}
     <span class="muted small">opens a GitHub issue form, recorded under your account</span></div>`;
 }
 function statusChip(r) {
@@ -147,14 +149,20 @@ function checklist(n) {
     return `<div class="cm ${by.length ? 'yes' : 'no'}" title="${esc(t)}"><span class="code">${esc(c)}</span><span class="what">${esc(t)}</span><span class="by">${by.length ? by.map(r => esc(r.by.kind === 'agent' ? (r.by.agent?.tool || 'AI') : r.by.login)).join(', ') : 'nobody yet'}</span></div>`;
   }).join('')}</div>`;
 }
+// What pins a definition down (evidence-core's pins): in the code, from reviewers, wanted.
+const PIN_KIND = {specifies: 'specification', example: 'example', nonexample: 'non-example', characterization: 'characterized by',
+  'unit test': 'unit test', test: 'test', 'met challenge': 'proposed test, met by', challenge: 'proposed test'};
+const PIN_RESULT = {passes: '<span class="chip good">passes</span>', sorry: '<span class="chip bad">has sorry</span>', missing: '<span class="chip bad">no longer in the library</span>'};
 function specsOf(e) {
-  const by = e?.specifiedBy || [];
-  if (!by.length && !(e?.characterizations || []).length) return '';
-  const kind = {specifies: 'specification', example: 'example', nonexample: 'non-example'};
-  let h = `<div class="cp-specs"><div class="lbl">Checked by Lean</div><ul>`;
-  h += by.map(s => `<li>${esc(kind[s.kind] || s.kind)}: ${declLink(s.decl)}${s.comment ? ` <span class="muted">— ${md(s.comment, true)}</span>` : ''}</li>`).join('');
-  h += (e.characterizations || []).map(c => `<li>characterized by ${declLink(c.property)}</li>`).join('');
-  return h + '</ul></div>';
+  const pins = e?.pins || [];
+  if (!pins.length) return e && !e.isProp ? `<div class="cp-specs"><div class="lbl">What pins it down</div><p class="muted small">Nothing yet: no specification, example or test.</p></div>` : '';
+  const item = p => {
+    if (p.kind === 'unit test') return `<li>unit test ${PIN_RESULT[p.result] || ''} <code>${esc(p.statement)}</code></li>`;
+    if (p.source === 'wanted') return `<li>${PIN_KIND[p.kind]}: ${md(p.comment, true)}${p.url ? ` <a class="small" href="${esc(p.url)}" target="_blank" rel="noopener">thread</a>` : ''}</li>`;
+    return `<li>${esc(PIN_KIND[p.kind] || p.kind)} ${declLink(p.decl)}${p.result && p.source === 'reviewers' ? ` ${PIN_RESULT[p.result] || ''}` : ''}${p.mentions === false ? ' <span class="chip bad" title="Its statement does not mention this definition: it does not pin it down">not about it</span>' : ''}${p.comment && p.kind !== 'characterization' ? ` <span class="muted">— ${md(p.comment, true)}</span>` : ''}</li>`;
+  };
+  const group = (src, lbl) => { const ps = pins.filter(p => p.source === src); return ps.length ? `<div class="lbl">${lbl}</div><ul>${ps.map(item).join('')}</ul>` : ''; };
+  return `<div class="cp-specs">${group('code', 'Pinned down in the code')}${group('reviewers', 'Tests listed by reviewers')}${group('wanted', 'Tests wanted')}</div>`;
 }
 function declSection(n) {
   const e = entries.get(n), st = declState(n), [cls, label] = STATE_CHIP[st];

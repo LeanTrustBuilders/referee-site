@@ -88,7 +88,8 @@ def build_claim(opt: ClaimOptions) -> dict:
     repo = opt.repo or config.get("library", {}).get("repo") or ds.meta.get("library", {}).get("repo", "")
 
     # The site scoped to the claim: its data files are what the page renders declarations from.
-    result = build(Options(dataset=opt.dataset, out=opt.out, source=opt.source, only=[claim],
+    # (with the evidence, so that each declaration's card says what pins it down, reviewers' tests included)
+    result = build(Options(dataset=opt.dataset, out=opt.out, source=opt.source, only=[claim], evidence=opt.store or opt.evidence,
                            repo=repo, issues_repo=repo, title=opt.title))
     out = opt.out
     shutil.move(out / "index.html", out / "site.html")

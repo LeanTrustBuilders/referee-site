@@ -78,9 +78,12 @@ class BuildTests(unittest.TestCase):
             self.assertEqual(tips[F + "triple"][1][0], "Definition")
             self.assertTrue(tips[F + "triple"][1][1].startswith(F + "triple"))   # its signature
             double = next(e for e in entries if e["name"] == F + "double")
-            self.assertEqual({s["decl"] for s in double["specifiedBy"]},
+            self.assertEqual({p["decl"] for p in double["pins"] if p["kind"] in ("specifies", "example", "nonexample")},
                              {F + "double_triple", F + "isDouble_double", F + "IsDouble.unique"})
-            self.assertEqual(double["characterizations"][0]["uniqueness"][0]["relation"], "a = b")
+            [char] = [p for p in double["pins"] if p["kind"] == "characterization"]
+            self.assertEqual((char["source"], char["uniqueness"][0]["relation"], char["complete"]), ("code", "a = b", True))
+            self.assertEqual((site["pins"][F + "double"]["pinned"], site["pins"][F + "double"]["characterized"]), (True, True))
+            self.assertIsNone(site["forms"])                              # no store: no forms
             self.assertEqual(double["change"]["class"], "body")
             self.assertEqual(double["provenance"]["changes"], 2)
 
@@ -242,6 +245,50 @@ class KernelCheckTests(unittest.TestCase):
             # A dataset that was not checked says nothing.
             build(Options(dataset=V / "fixture-b", out=tmp / "site2"))
             self.assertEqual(json.loads((tmp / "site2" / "data" / "site.json").read_text())["kernel"], {})
+
+
+class PinsTests(unittest.TestCase):
+    """What pins a definition down, with a store holding a listed test and a proposed one."""
+
+    def test_tests_from_reviewers_and_tests_wanted(self):
+        import shutil
+        from evidence_core import records as evrec
+        from evidence_core.store import Store, default_config
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            ds_dir = tmp / "ds"
+            shutil.copytree(V / "fixture-b", ds_dir)
+            meta = json.loads((ds_dir / "meta.json").read_text())
+            meta["facets"].append({"name": "examples", "file": "facets/examples.jsonl", "schema": "examples/1", "count": 1})
+            (ds_dir / "meta.json").write_text(json.dumps(meta))
+            (ds_dir / "facets" / "examples.jsonl").write_text(json.dumps({"decl": F + "triple", "examples": [
+                {"path": "Fixture/Uses.lean", "line": 3, "end": 3, "statement": "example : triple 1 = 3", "sorry": False}]}) + "\n")
+            ds = Dataset.load(ds_dir)
+            store = Store.init(tmp / "evidence", default_config("owner/lib", "Fixture"))
+            alice = {"kind": "person", "identity": {"kind": "github", "id": "alice"}}
+            subject = lambda n: evrec.subject_from_decl(ds.by_name[F + n], ds)
+            store.add([{"schema": evrec.SCHEMA, "kind": "test", "subject": subject("triple"), "test": {"name": F + "triple_pos"},
+                        "checks": "triple is positive", "by": alice, "at": "2026-09-27T10:00:00Z", "origin": {"kind": "issue", "ref": "owner/lib#4"}},
+                       {"schema": evrec.SCHEMA, "kind": "challenge", "subject": subject("triple"), "property": "triple is injective",
+                        "by": alice, "at": "2026-09-27T11:00:00Z", "origin": {"kind": "issue", "ref": "owner/lib#5"}}])
+            build(Options(dataset=ds_dir, out=tmp / "site", source=V / "source-b", evidence=tmp / "evidence"))
+            site = json.loads((tmp / "site" / "data" / "site.json").read_text())
+            entries = {e["name"]: e for p in (tmp / "site" / "data" / "m").glob("*.json") for e in json.loads(p.read_text())}
+            kinds = [(p["source"], p["kind"]) for p in entries[F + "triple"]["pins"]]
+            self.assertIn(("code", "unit test"), kinds)
+            self.assertIn(("reviewers", "test"), kinds)
+            self.assertIn(("wanted", "challenge"), kinds)
+            [test] = [p for p in entries[F + "triple"]["pins"] if p["kind"] == "test"]
+            self.assertEqual((test["decl"], test["result"], test["mentions"], test["url"]),
+                             (F + "triple_pos", "passes", True, "https://github.com/owner/lib/issues/4"))
+            self.assertEqual(site["pins"][F + "triple"], {"pinned": True, "characterized": False, "code": 2, "reviewers": 1, "wanted": 1})
+            self.assertEqual([(n, p["comment"]) for n, p in site["wanted"]], [(F + "triple", "triple is injective")])
+            self.assertEqual((site["forms"]["challenge"], site["forms"]["test"]), ("evidence-challenge.yml", "evidence-test.yml"))
+            # The claim page's cards say the same.
+            from trust_site.claim_page import ClaimOptions, build_claim
+            build_claim(ClaimOptions(dataset=ds_dir, out=tmp / "page", store=tmp / "evidence", source=V / "source-b", claim=F + "triple_pos"))
+            cards = {e["name"]: e for p in (tmp / "page" / "data" / "m").glob("*.json") for e in json.loads(p.read_text())}
+            self.assertIn(("wanted", "challenge"), [(p["source"], p["kind"]) for p in cards[F + "triple"]["pins"]])
 
 
 if __name__ == "__main__":

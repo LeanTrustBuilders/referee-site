@@ -207,6 +207,39 @@ function kernelLine(e) {
   const proof = t && t.kernel === 'ok' ? ' Its proof was checked the same way, against everything it uses.' : t && t.kernel === 'missing' ? ` Its proof, though, needs ${t.missing.map(x => declLink(x)).join(', ')} beyond what its proof dependencies list.` : '';
   return `<p>✓ <b>Its dependencies are complete:</b> Lean's kernel accepted it with nothing but what this page says it rests on.${proof}</p>`;
 }
+/* ---------- what pins a definition down (evidence-core's pins) ---------- */
+const PIN_KIND = {specifies: 'specification', example: 'example', nonexample: 'non-example', characterization: 'characterization',
+  'unit test': 'unit test', test: 'test', 'met challenge': 'proposed test, met by', challenge: 'proposed test'};
+const PIN_RESULT = {passes: '<span class="badge accepted">passes</span>', sorry: '<span class="badge sorry">has sorry</span>',
+  missing: '<span class="badge sorry">no longer in the library</span>'};
+const FORM_TITLE = {challenge: 'Challenge: ', test: 'Test: '};
+function formHref(kind, name) {
+  const q = new URLSearchParams({template: S.forms[kind], title: FORM_TITLE[kind] + name, decl: name, commit: S.commit});
+  return `https://github.com/${S.issuesRepo}/issues/new?${q}`;
+}
+function pinItem(p) {
+  const kind = `<span class="muted">${esc(PIN_KIND[p.kind] || p.kind)}</span>`;
+  const who = p.by ? ` <span class="muted small">· ${p.source === 'wanted' ? 'proposed' : 'listed'} by ${esc(p.by.label || p.by.login)}${p.at ? `, ${esc(p.at.slice(0, 10))}` : ''}${p.url ? ` · <a href="${esc(p.url)}" target="_blank" rel="noopener">thread</a>` : ''}</span>` : '';
+  if (p.kind === 'unit test') return `<li>${kind} ${PIN_RESULT[p.result] || ''} <a href="https://github.com/${esc(S.repo)}/blob/${esc(S.commit)}/${esc(p.path)}#L${p.line[0]}-L${p.line[1]}">${esc(p.path)}, line ${p.line[0]}</a><pre class="pin-stmt">${esc(p.statement)}</pre></li>`;
+  if (p.kind === 'characterization') return `<li>${kind} by ${declLink(p.decl)}${p.comment ? ` (${md(p.comment, true)})` : ''}: existence ${p.existence.map(x => declLink(x)).join(', ') || '<i>missing</i>'}; uniqueness ${p.uniqueness.map(u => declLink(u.decl) + (u.relation ? ` <span class="muted">up to <code>${esc(u.relation)}</code></span>` : '')).join(', ') || '<i>missing</i>'}</li>`;
+  if (p.source === 'code') return `<li>${kind} ${declLink(p.decl)}${p.comment ? ` <span class="muted">— ${md(p.comment, true)}</span>` : ''}</li>`;
+  if (p.source === 'reviewers') return `<li>${kind} ${declLink(p.decl)} ${PIN_RESULT[p.result] || ''}${p.mentions === false ? ' <span class="badge sorry" title="Its statement does not mention this definition, which @[specifies] requires of a specification: it does not count as pinning it down">not about it</span>' : ''}${p.comment ? ` — ${md(p.comment, true)}` : ''}${who}</li>`;
+  return `<li>${kind}: ${md(p.comment, true)}${p.statement ? `<pre class="pin-stmt">${esc(p.statement)}</pre>` : ''}${p.catches ? ` <span class="muted small">would catch: ${esc(p.catches)}</span>` : ''}${who}</li>`;
+}
+function pinsHtml(e) {
+  const pins = e.pins || [];
+  const groups = [['code', 'In the code', 'what its authors wrote: theorems marked as saying what it means (whose shapes Lean checks), and the examples that use it'],
+    ['reviewers', 'From reviewers', 'declarations of the library listed as its tests; each passes while it is there without sorry'],
+    ['wanted', 'Wanted', 'tests someone proposed and nobody has written yet']];
+  let h = `<h3>What pins it down</h3>`;
+  if (!pins.length) h += `<p class="muted">Nothing says what it means yet: no theorem is marked as specifying it, no example uses it, and nobody has listed or proposed a test.</p>`;
+  for (const [src, title, hint] of groups) {
+    const ps = pins.filter(p => p.source === src);
+    if (ps.length) h += `<p><b>${title}</b> <span class="muted small">— ${hint}</span></p><ul class="pins">${ps.map(pinItem).join('')}</ul>`;
+  }
+  if (S.forms && S.issuesRepo) h += `<p><a class="btn" target="_blank" rel="noopener" href="${formHref('challenge', e.name)}">Propose a test</a> <a class="btn" target="_blank" rel="noopener" href="${formHref('test', e.name)}">List a test</a> <span class="muted small">a property it should have, or a theorem of the library that checks it: opens a GitHub issue form</span></p>`;
+  return h;
+}
 function renderHome() {
   const c = S.counts;
   let h = pagerFor('#/') + `<h1 style="text-align:center">${esc(S.title)}</h1>` + scopeNotice();
@@ -267,9 +300,7 @@ async function renderDecl(name) {
   h += '<div class="facts">';
   if (e.claim) h += `<p><b>Claim</b>${e.claim.label ? ` — ${esc(e.claim.label)}` : ''}, from ${esc(e.claim.source)}. <a href="#/claims">All claims</a>.</p>`;
   if (e.specifies.length) h += `<p><b>Part of the specification of</b> ${e.specifies.map(s => declLink(s.target) + (s.comment ? ` <span class="muted">(${md(s.comment, true)})</span>` : '')).join(', ')}.</p>`;
-  if (e.specifiedBy.length) h += `<p><b>Specified by</b> ${e.specifiedBy.map(s => `${declLink(s.decl)}${s.kind !== 'specifies' ? ` <span class="muted">(${esc(s.kind)})</span>` : ''}${s.comment ? ` <span class="muted">— ${md(s.comment, true)}</span>` : ''}`).join(', ')}.</p>`;
-  for (const c of e.characterizations) h += `<p><b>Characterized</b> by ${declLink(c.property)}${c.comment ? ` (${md(c.comment, true)})` : ''}: existence ${c.existence.map(x => declLink(x)).join(', ') || '<i>missing</i>'}; uniqueness ${c.uniqueness.map(u => declLink(u.decl) + (u.relation ? ` <span class="muted">up to <code>${esc(u.relation)}</code></span>` : '')).join(', ') || '<i>missing</i>'}.</p>`;
-  if (!e.isProp && !e.specifiedBy.length && !e.characterizations.length && S.hasSpecs) h += `<p class="muted">No theorem is marked as specifying this definition.</p>`;
+  if (!e.isProp) h += pinsHtml(e);
   h += '</div>';
   if (e.provenance && S.ledger) {
     const b = S.ledger.builds[e.provenance.last], when = b.date ? ` (${esc(b.date)})` : '';
@@ -374,17 +405,20 @@ function renderTheorems() {
 }
 async function renderSpecifications() {
   const defs = D.filter(r => !/Theorem|Lemma/.test(r[R.KIND]));
-  const specified = new Map(S.specified || []);
+  const P = S.pins || {}, pinOf = r => P[r[R.NAME]] || {};
   let h = pagerFor('#/specifications') + `<h1>Specifications</h1>` + scopeNotice() +
-    `<p>A definition is taken on faith unless something says what it means. Here are the theorems the authors marked as saying so — <code>@[specifies]</code>, examples and non-examples, and characterizations, whose shapes Lean checks — and the definitions nothing specifies, ranked by how much of the library uses them.</p>`;
-  const withSpec = defs.filter(r => specified.has(r[R.NAME])), without = defs.filter(r => !specified.has(r[R.NAME]));
-  h += `<h2>Specified (${withSpec.length})</h2>`;
-  for (const r of withSpec.sort((a, b) => a[R.NAME].localeCompare(b[R.NAME]))) {
-    const s = specified.get(r[R.NAME]);
-    h += `<div class="rowcard"><div class="h"><a href="${declHref(r[R.NAME])}">${esc(r[R.NAME])}</a><span class="meta">${esc(r[R.KIND])}</span>${s.characterized ? '<span class="badge accepted">characterized</span>' : ''}</div><div class="d">${s.by.map(x => `${declLink(x.decl)}${x.kind !== 'specifies' ? ` <span class="muted">(${esc(x.kind)})</span>` : ''}${x.comment ? ` <span class="muted">— ${md(x.comment, true)}</span>` : ''}`).join('<br>')}</div></div>`;
+    `<p>A definition is taken on faith unless something says what it means. Three sources do: <b>the code</b> (theorems its authors marked with <code>@[specifies]</code>, examples and non-examples, and characterizations, whose shapes Lean checks, and the <code>example</code>s that use it), <b>reviewers</b> (theorems of the library they listed as its tests, each passing while it is there without <code>sorry</code>), and what is <b>wanted</b> (tests someone proposed and nobody has written yet, which do not count until they are).</p>`;
+  const pinned = defs.filter(r => pinOf(r).pinned), without = defs.filter(r => !pinOf(r).pinned);
+  const counts = s => [s.code ? `${s.code} in the code` : '', s.reviewers ? `${s.reviewers} from reviewers` : '', s.wanted ? `${s.wanted} wanted` : ''].filter(Boolean).join(' · ');
+  h += `<h2>Pinned down (${pinned.length})</h2>`;
+  for (const r of pinned.sort((a, b) => a[R.NAME].localeCompare(b[R.NAME]))) {
+    const s = pinOf(r);
+    h += `<div class="rowcard"><div class="h"><a href="${declHref(r[R.NAME])}">${esc(r[R.NAME])}</a><span class="meta">${esc(r[R.KIND])}</span>${s.characterized ? '<span class="badge accepted">characterized</span>' : ''}</div><div class="d muted">${counts(s)}</div></div>`;
   }
+  const wanted = S.wanted || [];
+  if (wanted.length) h += `<h2>Proposed tests still open (${wanted.length})</h2><ul class="pins">${wanted.map(([name, p]) => `<li>${declLink(name)}: ${md(p.comment, true)}${p.url ? ` <span class="muted small">· <a href="${esc(p.url)}" target="_blank" rel="noopener">thread</a></span>` : ''}</li>`).join('')}</ul>`;
   const uses = new Map(); for (const [s, ts] of Object.entries(G)) for (const t of ts) uses.set(t, (uses.get(t) || 0) + 1);
-  h += `<h2>Not specified (${without.length})</h2><p>Ranked by how many declarations use them directly.</p><ul class="decl-list">${without.sort((a, b) => (uses.get(b[R.ID]) || 0) - (uses.get(a[R.ID]) || 0)).map(r => `<li><span class="n"><a href="${declHref(r[R.NAME])}">${esc(r[R.NAME])}</a></span><span class="m">${esc(r[R.KIND])} · used by ${uses.get(r[R.ID]) || 0}</span></li>`).join('')}</ul>`;
+  h += `<h2>Not pinned down (${without.length})</h2><p>Ranked by how many declarations use them directly.</p><ul class="decl-list">${without.sort((a, b) => (uses.get(b[R.ID]) || 0) - (uses.get(a[R.ID]) || 0)).map(r => `<li><span class="n"><a href="${declHref(r[R.NAME])}">${esc(r[R.NAME])}</a></span><span class="m">${esc(r[R.KIND])} · used by ${uses.get(r[R.ID]) || 0}${pinOf(r).wanted ? ` · ${pinOf(r).wanted} wanted` : ''}${pinOf(r).reviewers ? ` · ${pinOf(r).reviewers} listed, not passing` : ''}</span></li>`).join('')}</ul>`;
   return h;
 }
 function renderBrowse() {
@@ -529,7 +563,7 @@ async function route() {
 async function start() {
   [S, D, G] = await Promise.all([getJSON('data/site.json'), getJSON('data/decls.json'), getJSON('data/graph.json')]);
   D.forEach((r, i) => { byName.set(r[R.NAME], r); idIndex.set(r[R.ID], i); });
-  S.hasSpecs = !!(S.specified && S.specified.length);
+  S.hasSpecs = Object.values(S.pins || {}).some(p => p.pinned);
   number(); loadAudit(); frame(); setupSearch(); setupTips();
   document.addEventListener('click', ev => { if (ev.target.closest('.expand-btn')) { expanded = !expanded; try { localStorage.setItem('trust-site:expanded', expanded ? '1' : '0'); } catch (e) { } applyExpanded(); } });
   window.addEventListener('hashchange', route); route();

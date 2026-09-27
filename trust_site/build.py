@@ -31,6 +31,8 @@ from evidence_core import ledger as ledger_mod
 from evidence_core import records as evrec
 from evidence_core.changes import compare
 from evidence_core.checks import kernel_notions, kernel_summary
+from evidence_core.pins import Pins
+from evidence_store.forms import FORMS as STORE_FORMS
 from evidence_core.source import Sources, split_statement
 from evidence_core.store import Store
 from evidence_core.views import views_on
@@ -180,13 +182,14 @@ def build(opt: Options) -> dict:
                 {k: (v[:20] if isinstance(v, list) else v) for k, v in row.items() if k != "decl"}
         return out
 
-    spec_of = analysis.specifications(ds)          # definition → the theorems about it
-    chars = analysis.characterizations(ds)          # definition → its characterizations
 
     # Changes against a baseline, and published evidence.
     base = Dataset.load(opt.baseline) if opt.baseline else None
     changes = compare(ds, base, scope_names={d.name for d in scope}) if base else None
-    reviews = load_evidence(opt.evidence, ds, base, store)
+    ev = load_evidence(opt.evidence, ds, base, store)
+    reviews = {name: views_on(ev, name, "review") for name in ev.by_decl if views_on(ev, name, "review")} if ev else {}
+    # What pins each definition down: in the code, from reviewers, wanted (evidence-core's pins).
+    pins = Pins(ds, ev)
 
     claim_by_decl = {c.decl: c for c in cl.claims if c.found}
     led = ledger_mod.load(opt.ledger)
@@ -234,8 +237,7 @@ def build(opt: Options) -> dict:
             "reviews": reviews.get(d.name, []),
             "claim": claim_by_decl[d.name].as_json() if d.name in claim_by_decl else None,
             "specifies": ann["specifies"].get(d.name, []),
-            "specifiedBy": spec_of.get(d.name, []),
-            "characterizations": chars.get(d.name, []),
+            "pins": pins.of(d.name) if not d.is_prop else [],
             "pulled": d.id in pulled,
             "directExternal": sorted(by_id[t].name for t in meaning.get(d.id, ()) if not by_id[t].is_project),
             "provenance": ({"last": hist[d.name][-1][0], "changes": len(hist[d.name]), "first": hist[d.name][0][0]}
@@ -338,9 +340,11 @@ def build(opt: Options) -> dict:
                    "project": cl.project, "warnings": cl.warnings},
         "readme": {"name": readme[0], "text": readme[1]} if readme else None,
         "changes": changes.summary if changes else None,
-        "specified": [[d.name, {"by": spec_of.get(d.name, []),
-                                "characterized": analysis.is_characterized(chars.get(d.name, []))}]
-                      for d in scope if not d.is_prop and (spec_of.get(d.name) or chars.get(d.name))],
+        # Every definition's pins in short, and the proposed tests still open.
+        "pins": {d.name: pins.summary(d.name) for d in scope if not d.is_prop},
+        "wanted": [[d.name, p] for d in scope if not d.is_prop for p in pins.of(d.name) if p["source"] == "wanted"],
+        # The evidence store's issue forms, when the site has a store (evidence-store's names).
+        "forms": {kind: form["file"] for kind, form in STORE_FORMS.items()} if store is not None else None,
         "evidence": {"records": sum(len(v) for v in reviews.values())} if reviews else None,
         "kernel": {n: kernel_summary(ds, n, [d.name for d in scope]).as_json() for n in kernel_rows},
         "ledger": {"builds": led["builds"]} if led["builds"] else None,
@@ -389,15 +393,12 @@ def file_dates(root: Path | None, paths: set[str]) -> dict[str, dict]:
 
 
 def load_evidence(path: Path | None, ds: Dataset, base: Dataset | None, store: Store | None = None
-                  ) -> dict[str, list[dict]]:
-    """Published reviews (S3), by declaration, as evidence-core resolves them against this dataset:
-    each with its status, its state (a withdrawn review stays listed, marked), and whether it is in
-    force."""
+                  ) -> Evidence | None:
+    """Published evidence (S3), as evidence-core resolves it against this dataset; None without any."""
     if store is not None:
         records = store.records
     elif path and Path(path).is_file():
         records = evrec.load(path)
     else:
-        return {}
-    ev = Evidence.resolve(records, ds, {base.commit: base} if base else None)
-    return {name: views_on(ev, name, "review") for name in ev.by_decl if views_on(ev, name, "review")}
+        return None
+    return Evidence.resolve(records, ds, {base.commit: base} if base else None)
