@@ -376,6 +376,40 @@ function domainHtml(e) {
   }
   return h;
 }
+// The uses of definitions with a declared domain in a statement, and whether the statement shows their
+// arguments to be in it: what is not shown first. The analyzer's words, made plain.
+const WD_STATUS = {
+  open: ['not shown', 'nothing in scope shows it: the hypotheses, and what the statement says before this point'],
+  refuted: ['outside the domain', 'what is in scope contradicts it: the statement is about the value outside the domain, a default'],
+  unapplied: ['used as a function', 'it is not applied to its arguments here, so its domain is not stated at each point'],
+  irrelevant: ['does not matter', 'the statement says the same whatever value it takes here'],
+  discharged: ['shown', 'from what is in scope'],
+};
+function wdPlace(o) {
+  if (o.place === 'hypothesis') return o.name ? `in the hypothesis <code>${esc(o.name)}</code>` : `in hypothesis ${o.index}`;
+  if (o.place === 'binder') return `in the type of <code>${esc(o.name)}</code>`;
+  return 'in the conclusion';
+}
+function wellDefinedHtml(e) {
+  const w = e.wellDefined;
+  if (!w || (!w.obligations.length && !w.error)) return '';
+  const order = ['open', 'refuted', 'unapplied', 'irrelevant', 'discharged'];
+  const obs = [...w.obligations].sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status));
+  const meta = S.wellDefined?.meta;
+  let h = `<h3>The domains of the definitions it uses</h3>`;
+  if (w.error) return h + `<p class="muted">The analysis failed on this statement: <code>${esc(w.error)}</code></p>`;
+  if (e.claim && w.left.length) h += `<div class="notice warn">This claim does not show ${w.left.map(g => `<code>${esc(g)}</code>`).join(', ')}: where it uses ${w.left.length === 1 ? 'a definition' : 'definitions'} outside ${w.left.length === 1 ? 'that domain' : 'those domains'}, it may hold only by a default value.</div>`;
+  else if (!e.claim && w.left.length) h += `<p class="muted small">In a library lemma, a use outside a domain is often deliberate: the lemma then also covers the default value, and needs one hypothesis fewer. It matters in the results a library puts forward.</p>`;
+  h += `<ul class="wd">${obs.map(o => {
+    const [word, why] = WD_STATUS[o.status] || [o.status, ''];
+    const how = o.hypothesis ? `, from <code>${esc(o.hypothesis)}</code>` : o.by && o.by !== 'assumption' ? `, by <code>${esc(o.by)}</code>` : '';
+    const every = (o.bound || []).length ? `, for every ${o.bound.map(b => `<code>${esc(b)}</code>`).join(', ')}` : '';
+    const needs = o.goal ? ` needs <code>${esc(o.goal)}</code>${every}` : '';
+    return `<li class="wd-${esc(o.status)}"><b title="${esc(why)}">${word}</b>${how}: <code>${esc(o.term)}</code>${needs}, ${wdPlace(o)} <span class="muted small">(${declLink(o.op, o.op.split('.').pop())}, domain declared by ${o.source === 'catalogue' ? 'a catalogue' : 'its authors'})</span></li>`;
+  }).join('')}</ul>`;
+  h += `<p class="muted small">Each use of a definition with a declared domain (<code>@[domain]</code>), and whether its arguments are shown to be in it from what is in scope where it sits: the hypotheses before it, the left side of an <code>∧</code>, the condition of an <code>if</code>. “Not shown” means the analyzer's dischargers did not prove it${meta?.dischargers ? ` (${meta.dischargers.map(d => `<code>${esc(d)}</code>`).join(', ')})` : ''}: it may still follow, by an argument they do not find.</p>`;
+  return h;
+}
 function pinsHtml(e) {
   const pins = e.pins || [];
   const groups = [['code', 'In the code', 'what its authors wrote: theorems marked as saying what it means (whose shapes Lean checks), and the examples that use it'],
@@ -457,6 +491,7 @@ async function renderDecl(name) {
   if (e.claim) h += `<p><b>Claim</b>${e.claim.label ? ` — ${esc(e.claim.label)}` : ''}, from ${esc(e.claim.source)}. <a href="#/claims">All claims</a>.</p>`;
   if (e.specifies.length) h += `<p><b>Part of the specification of</b> ${e.specifies.map(s => declLink(s.target) + (s.comment ? ` <span class="muted">(${md(s.comment, true)})</span>` : '')).join(', ')}.</p>`;
   if (!e.isProp) h += domainHtml(e) + pinsHtml(e);
+  else h += wellDefinedHtml(e);
   h += '</div>';
   if (e.provenance && S.ledger) {
     const b = S.ledger.builds[e.provenance.last], when = b.date ? ` (${esc(b.date)})` : '';
@@ -616,6 +651,8 @@ function renderClaims() {
     const label = c.label || c.reference;
     extra += `<div class="d">${label ? `<b>${md(label, true)}</b>. ` : ''}${c.note ? md(c.note, true) : ''}</div>`;
     if (c.comparator) extra += `<div class="d muted" style="font-size:13px">Certified by the Comparator config <code>${esc(c.comparator.path)}</code>, permitted axioms ${(c.comparator.permitted_axioms || []).map(a => `<code>${esc(a)}</code>`).join(', ') || 'none listed'}${c.comparator.enable_nanoda ? ', with a second, independently implemented kernel' : ''}${c.additional?.length ? `; certified together with ${c.additional.map(n => declLink(n)).join(', ')}` : ''}. What it settles is the <i>statement</i>; what the definitions in the statement mean is what the rest of this site is for.</div>`;
+    const wdLeft = S.wellDefined?.left?.[c.decl];
+    if (wdLeft) extra += `<div class="d"><span class="badge underneath">domains: ${plural(wdLeft, 'condition')} not shown</span> <span class="muted small">where the statement uses a definition with a declared domain, and does not show its arguments to be in it</span></div>`;
     if (c.literature?.length) extra += `<div class="d muted" style="font-size:13px">Relies on, from the literature: ${c.literature.map(l => esc(typeof l === 'string' ? l : JSON.stringify(l))).join('; ')}</div>`;
     h += rowCard(r, extra).replace('<div class="d clamp">', '<div class="d clamp" style="display:none">');
   }

@@ -222,6 +222,9 @@ def build(opt: Options) -> dict:
     domains = analysis.domains(ds)
     # What each definition is determined up to (@[up_to]).
     up_to = analysis.up_to(ds)
+    # Each use of a definition with a declared domain in a statement, and whether the statement
+    # shows its arguments to be in it (the facet `welldefined`, from trust-extract welldefined).
+    well_defined = analysis.well_definedness(ds)
 
     claim_by_decl = {c.decl: c for c in cl.claims if c.found}
     led = ledger_mod.load(opt.ledger)
@@ -277,6 +280,7 @@ def build(opt: Options) -> dict:
             "pins": pins.of(d.name) if not d.is_prop else [],
             "domain": domains.get(d.name),
             "upTo": up_to.get(d.name),
+            "wellDefined": well_defined.get(d.name),
             "pulled": d.id in pulled,
             "directExternal": sorted(by_id[t].name for t in meaning.get(d.id, ()) if not by_id[t].is_project),
             "provenance": ({"last": hist[d.name][-1][0], "changes": len(hist[d.name]), "first": hist[d.name][0][0]}
@@ -386,6 +390,12 @@ def build(opt: Options) -> dict:
         # Each characterized definition of the site, with its complete characterizations, which the
         # dependency graph can take it through instead of its construction (see characterizations_of).
         "characterizations": characterizations_of(ds, pins.chars, by_name_scope, scope_set, meaning),
+        # How the well-definedness facet was made (its dischargers, their budget), and per
+        # declaration of the site what its statement leaves unshown, for the lists.
+        "wellDefined": ({"meta": analysis.well_definedness_meta(ds),
+                         "left": {d.name: len(well_defined[d.name]["left"]) for d in scope
+                                  if d.name in well_defined and well_defined[d.name]["left"]}}
+                        if well_defined else None),
         "wanted": [[d.name, p] for d in scope if not d.is_prop for p in pins.of(d.name) if p["source"] == "wanted"],
         # The evidence store's issue forms, when the site has a store (evidence-store's names).
         "forms": {kind: form["file"] for kind, form in STORE_FORMS.items()} if store is not None else None,
