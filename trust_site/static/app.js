@@ -86,18 +86,13 @@ function closure(id) {
   while (stack.length) { const x = stack.pop(); if (seen.has(x)) continue; seen.add(x); for (const t of G[x] || []) if (!seen.has(t)) stack.push(t); }
   closureCache.set(id, seen); return seen;
 }
-// The meaning graph through characterizations: a characterized definition rests on the uniqueness
-// theorems of its characterizations (site.json's characterizedBy) instead of its construction, and a
-// characterization on what its statement says, not on the definition it characterizes.
-let charTarget = null;
-function succVia(x) {
-  const via = S.characterizedBy || {};
-  if (!charTarget) { charTarget = new Map(); for (const [d, ts] of Object.entries(via)) for (const u of ts) charTarget.set(u, +d); }
-  return via[x] || (G[x] || []).filter(u => u !== charTarget.get(x));
-}
-function closureVia(id) {
-  const seen = new Set(), stack = [...succVia(id)];
-  while (stack.length) { const x = stack.pop(); if (seen.has(x)) continue; seen.add(x); for (const u of succVia(x)) if (!seen.has(u)) stack.push(u); }
+// The meaning graph from a characterization of one definition: what the characterization's
+// statement rests on (its property, its relation, where it holds), never entering the definition it
+// characterizes. Everything below stays as defined: another definition's characterization may hold
+// on a smaller domain (the integral of real functions only), so it is never substituted.
+function closureAvoiding(seeds, avoid) {
+  const seen = new Set(), stack = [...seeds];
+  while (stack.length) { const x = stack.pop(); if (x === avoid || seen.has(x)) continue; seen.add(x); for (const u of G[x] || []) if (!seen.has(u)) stack.push(u); }
   return seen;
 }
 const coverageCache = new Map();
@@ -474,10 +469,10 @@ async function renderDecl(name) {
   } else if (e.edited) h += `<p class="muted" style="font-size:14px">File last edited ${esc(e.edited.date)}.</p>`;
   h += community() ? communityPanel(e, name) : auditControl(name);
   const b = beneath(row[R.ID]);
-  // A second view when a characterized definition is on the way: the meaning graph through the
-  // characterizations, which a reader who trusts their properties can take instead of the constructions.
-  const viaAt = [row[R.ID], ...closure(row[R.ID])].filter(i => (S.characterizedBy || {})[i]);
-  h += `<h3>Dependency graph</h3>${viaAt.length ? `<div class="seg dgviews"><button data-dgview="construction" class="on">As defined</button><button data-dgview="via">Through characterizations</button></div><p class="small muted" id="dgnote"></p>` : ''}<div class="graph" id="dg"></div>`;
+  // A second view for a characterized definition, one per characterization: its meaning graph from
+  // the characterization, which a reader who trusts the property can take instead of the construction.
+  const charThms = (S.characterizedBy || {})[row[R.ID]] || [];
+  h += `<h3>Dependency graph</h3>${charThms.length ? `<div class="seg dgviews"><button data-dgview="construction" class="on">As defined</button>${charThms.map(u => `<button data-dgview="${u}">From its characterization by <code>${esc(D[idIndex.get(u)][R.NAME].split('.').pop())}</code></button>`).join('')}</div><p class="small muted" id="dgnote"></p>` : ''}<div class="graph" id="dg"></div>`;
   h += `<p><b>Audit surface:</b> ${plural(row[R.DEPS], 'project declaration')}, ${plural(row[R.EXT], 'external constant')}. ${b.total ? `${b.accepted}/${b.total} beneath ${community() ? 'reviewed by the community' : 'accepted'}${b.covered ? ' — covered' : ''}.` : ''}</p>`;
   if (e.outside?.length) h += `<p class="muted">Outside this scoped site: ${e.outside.map(x => `<code>${esc(x)}</code>`).join(', ')}.</p>`;
   if (e.external.length) h += `<details><summary class="muted">The external constants its statement rests on</summary><ul>${e.external.map(([n, p, k]) => `<li><code data-c="${esc(n)}">${esc(n)}</code> <span class="muted">${esc(p)} · ${esc(k)}</span></li>`).join('')}</ul></details>`;
@@ -493,21 +488,25 @@ async function renderDecl(name) {
       if (ev.key in m) { setVerdict(name, m[ev.key]); const box = $('[data-audit]'); if (box) { const fresh = document.createElement('div'); fresh.innerHTML = auditControl(name); box.replaceWith(fresh.firstElementChild); wireAudit($('#main')); } } };
     const rootId = row[R.ID];
     const nameOf = i => D[idIndex.get(i)][R.NAME];
-    const views = {
-      construction: () => { const ids = [rootId, ...closure(rootId)]; return {ids, succ: i => G[i] || []}; },
-      via: () => { const ids = [rootId, ...closureVia(rootId)]; return {ids, succ: succVia}; },
-    };
+    // The construction; or, from a characterization `u`, the definition resting on `u` alone and `u`
+    // on what its statement says, the definition itself not entered again.
+    const view_ = v => v === 'construction'
+      ? {ids: [rootId, ...closure(rootId)], succ: i => G[i] || []}
+      : {ids: [rootId, ...closureAvoiding([+v], rootId)], succ: i => i === rootId ? [+v] : (G[i] || []).filter(u => u !== rootId)};
     let view = 'construction', force = false;
     // What a view is: its size, and for the second one what the characterizations leave out and add.
     const note = () => {
       const el = $('#dgnote'); if (!el) return;
       if (view === 'construction') { el.innerHTML = `As defined: what its construction rests on.`; return; }
-      const c = new Set(views.construction().ids), v = new Set(views.via().ids);
+      const c = new Set(view_('construction').ids), v = new Set(view_(view).ids);
+      const thm = D[idIndex.get(+view)][R.NAME];
+      const pin = (e.pins || []).find(p => p.kind === 'characterization' && p.uniqueness.some(u => u.decl === thm)) || {};
+      const holds = [...(pin.context || []), ...(pin.assuming || [])];
       const out = [...c].filter(i => !v.has(i)), added = [...v].filter(i => !c.has(i));
       // The main pieces of the constructions first: those resting on the most.
       const defs = out.filter(i => !/Theorem|Lemma/.test(D[idIndex.get(i)][R.KIND]))
         .sort((a, b) => closure(b).size - closure(a).size).slice(0, 5);
-      el.innerHTML = `Through the characterizations of ${viaAt.map(i => declLink(nameOf(i))).join(', ')}: each rests on what its characterization says, instead of on its construction. ${plural(v.size, 'declaration')} instead of ${c.size.toLocaleString('en')}: ${plural(out.length, 'declaration')} of the constructions left out${defs.length ? ` (${defs.map(i => `<code>${esc(nameOf(i))}</code>`).join(', ')}${out.length > defs.length ? ', …' : ''})` : ''}, ${added.length.toLocaleString('en')} added.`;
+      el.innerHTML = `From its characterization by ${declLink(thm)}: it rests on what the characterization says, its property and its relation, instead of on its construction; everything below is as defined. The characterization holds ${holds.length ? `where ${holds.map(x => `<code>${esc(x)}</code>`).join(', ')}` : 'without conditions'}${(pin.variables || []).length ? `, for ${pin.variables.map(x => `<code>${esc(x)}</code>`).join(', ')}` : ''}: this view is only as general as that. ${plural(v.size, 'declaration')} instead of ${c.size.toLocaleString('en')}: ${plural(out.length, 'declaration')} of its construction left out${defs.length ? ` (${defs.map(i => `<code>${esc(nameOf(i))}</code>`).join(', ')}${out.length > defs.length ? ', …' : ''})` : ''}, ${added.length.toLocaleString('en')} added.`;
     };
     // The band: what the statement names directly from outside the project, the toolchain's own
     // basics (`Nat`, `Eq`, …) left out. By default only what comes from an unaudited package — what
@@ -518,7 +517,7 @@ async function renderDecl(name) {
     let showAudited = false; try { showAudited = localStorage.getItem('trust-site:graph-upstream') === '1'; } catch (err) { }
     const draw = () => {
       note();
-      const {ids, succ} = views[view]();
+      const {ids, succ} = view_(view);
       if (ids.length > 600 && !force) {
         $('#dg').innerHTML = `<p class="muted">${plural(ids.length, 'declaration')}: too many to draw quickly. <button class="btn" id="dgforce">Draw anyway</button></p>`;
         $('#dgforce').onclick = () => { force = true; draw(); };
@@ -533,7 +532,7 @@ async function renderDecl(name) {
       graph($('#dg'), {nodes: ns, edges: es, unit: 'declaration', card: nodeCard, ...AUDIT_GRAPH,
         extra: view === 'construction' && audited ? {label: showAudited ? 'Hide audited upstream' : `Show audited upstream (${audited})`, pressed: showAudited,
           onClick: () => { showAudited = !showAudited; try { localStorage.setItem('trust-site:graph-upstream', showAudited ? '1' : '0'); } catch (err) { } draw(); }} : null,
-        caption: `${plural(ids.length, 'declaration')} across the dependency rows; the top row depends on nothing. ${view === 'via' ? 'A characterized definition points to its characterization. ' : ''}Click a node to read it here.`});
+        caption: `${plural(ids.length, 'declaration')} across the dependency rows; the top row depends on nothing. ${view !== 'construction' ? 'The definition points to its characterization. ' : ''}Click a node to read it here.`});
     };
     document.querySelectorAll('[data-dgview]').forEach(b => b.onclick = () => {
       view = b.dataset.dgview; force = false;
