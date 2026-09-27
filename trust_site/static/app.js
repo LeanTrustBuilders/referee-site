@@ -188,7 +188,7 @@ function report() {
 
 /* ---------- my review, as a form ---------- */
 const CHECK_NEXT = {'': 'checked', checked: 'na', na: ''};
-const CHECK_LABEL = {checked: '✓', na: 'n/a', '': ''};
+const CHECK_BOX = {checked: '✓', na: 'n/a', '': '☐'};
 // My review, submitted to the store: the store's form for its verdict, filled in as far as GitHub lets
 // a link fill a form (not the checkboxes).
 function submitHref(name) {
@@ -209,7 +209,8 @@ function auditControl(name) {
     <div class="rv-form"${v.verdict ? '' : ' hidden'}>
       <label class="rv-cat"${v.verdict === 'problem' ? '' : ' hidden'}>What is wrong <select data-f="category">${Object.entries(RV.CATEGORY).filter(([k]) => k !== 'F8').map(([k, t]) => `<option value="${k}"${v.category === k ? ' selected' : ''}>${k === 'naming' || k === 'other' ? '' : k + ' '}${esc(t)}</option>`).join('')}</select></label>
       <label class="rv-row"${v.verdict === 'accept' ? '' : ' hidden'}>Compared with <input data-f="reference" value="${esc(v.reference || '')}" placeholder="the source you checked it against: a book, a paper, a URL"></label>
-      <div class="rv-checks"${v.verdict === 'accept' ? '' : ' hidden'}><span class="lbl">What I checked</span>${RV.MODES.map(([c, t]) => `<button data-ck="${c}" class="ck ${ck[c] || 'unset'}" title="${esc(t)}: click for checked, then not applicable, then not checked">${esc(c)}${CHECK_LABEL[ck[c] || ''] ? ' ' + CHECK_LABEL[ck[c]] : ''}</button>`).join('')}</div>
+      <div class="rv-checks"${v.verdict === 'accept' ? '' : ' hidden'}><span class="lbl">What I checked</span> <span class="hint">tap once for checked, twice for not applicable, a third time to clear</span>
+        <div class="ck-list">${RV.MODES.map(([c, t]) => `<button type="button" data-ck="${c}" class="ck ${ck[c] || 'unset'}"><span class="box">${CHECK_BOX[ck[c] || '']}</span><span>${c.startsWith('F') ? `<b>${esc(c)}</b> ` : ''}${esc(((S.formOptions || {}).checks || {})[c] || t)}</span></button>`).join('')}</div></div>
       <label class="rv-row"${v.verdict === 'accept' ? '' : ' hidden'}>Caveats <textarea data-f="caveats" rows="2" placeholder="what it holds only with, one per line (e.g. F3: only for nonzero x)">${esc(v.caveats || '')}</textarea></label>
       <label class="rv-row">I am <select data-f="involvement">${[['', 'not said'], ['outsider', 'an outsider to this library'], ['contributor', 'a contributor'], ['author', 'the author of this declaration']].map(([k, t]) => `<option value="${k}"${(v.involvement || '') === k ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></label>
     </div>

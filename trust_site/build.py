@@ -33,7 +33,7 @@ from evidence_core import records as evrec
 from evidence_core.changes import compare
 from evidence_core.checks import kernel_notions, kernel_summary
 from evidence_core.coverage import UNCOUNTED, all_policies, coverage as coverage_of, policy_key, queue as queue_of
-from evidence_store.forms import CATEGORIES as FORM_CATEGORIES, INVOLVEMENT as FORM_INVOLVEMENT
+from evidence_store.forms import CATEGORIES as FORM_CATEGORIES, CHECKS as FORM_CHECKS, INVOLVEMENT as FORM_INVOLVEMENT
 from evidence_core.pins import Pins
 from evidence_store.forms import FORMS as STORE_FORMS
 from evidence_core.source import Sources, split_statement
@@ -375,7 +375,8 @@ def build(opt: Options) -> dict:
             "queue": [[[d.name, w] for d, w in queue_of(ev, cl.names, p, limit=40)] if cl.names else [] for p in POLICIES],
         } if ev else None,
         # How the store's forms name their options, for prefilling them (evidence-store's).
-        "formOptions": {"categories": dict(FORM_CATEGORIES), "involvement": dict(FORM_INVOLVEMENT)},
+        "formOptions": {"categories": dict(FORM_CATEGORIES), "checks": dict(FORM_CHECKS),
+                        "involvement": dict(FORM_INVOLVEMENT)},
         "kernel": {n: kernel_summary(ds, n, [d.name for d in scope]).as_json() for n in kernel_rows},
         "ledger": {"builds": led["builds"]} if led["builds"] else None,
         "tipShards": tip_shards,

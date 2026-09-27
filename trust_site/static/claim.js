@@ -132,8 +132,8 @@ function reviewNext() {
     ...E.order.filter(n => openQuestions(n).length).map(n => [n, 'answer the open question'])];
   const gaps = E.order.filter(n => c.covered.includes(n)).map(n => {
     const live = reviewsOf(n).filter(r => r.verdict === 'accept' && inForce(r) && r.applies);
-    const none = MODES.filter(([m]) => !live.some(r => r.checked[m] === 'checked')).map(([m]) => m);
-    return none.length ? [n, `reviewed, but nobody checked ${none.join(', ')}`] : null;
+    const none = MODES.filter(([m]) => !live.some(r => r.checked[m] === 'checked'));
+    return none.length ? [n, `reviewed, but nobody checked ${none.map(([m, t]) => m.startsWith('F') ? `${m} (${t})` : t).join(', ')}`] : null;
   }).filter(Boolean);
   const all = [...rank, ...gaps];
   if (!all.length) return `<section class="cp-next" id="next"><h2>Review next</h2><p class="muted">Nothing: every declaration is covered, and every failure mode was checked by someone.</p></section>`;

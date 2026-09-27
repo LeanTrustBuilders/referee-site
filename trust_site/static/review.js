@@ -11,6 +11,8 @@ const RV = (() => {
   const CATEGORY = {F1: 'a different object', F2: 'a different convention', F3: 'different edge cases', F4: 'a junk value',
     F5: 'vacuous or trivial', F6: 'an arbitrary choice', F7: 'something wrong underneath', F8: 'drift', F9: 'less general than the source',
     naming: 'a misleading name or docstring', other: 'something else'};
+  // A failure mode as a reader sees it: its code, and what it is, never the code alone.
+  const modeName = (c, t) => `${c.startsWith('F') ? `<code>${esc(c)}</code> ` : ''}${esc(t)}`;
   const TITLE = {review: 'Review: ', problem: 'Problem: ', question: 'Question: ', status: 'Status: ', challenge: 'Challenge: ', test: 'Test: '};
   const STATE = {open: 'open', fixed: 'fixed', intended: 'intended as it is', invalid: 'not a problem', answered: 'answered',
     withdrawn: 'withdrawn', reopened: 'reopened'};
@@ -99,7 +101,7 @@ const RV = (() => {
     if (r.reference) body += `<div class="t-ref"><span class="lbl">Compared with</span> ${r.reference.url ? `<a href="${esc(r.reference.url)}">${esc(r.reference.text)}</a>` : esc(r.reference.text)}</div>`;
     const checked = MODES.filter(([c]) => (r.checked || {})[c] === 'checked'), unchecked = MODES.filter(([c]) => (r.checked || {})[c] === 'unchecked');
     if (checked.length || unchecked.length)
-      body += `<div class="t-checks">${checked.map(([c, t]) => `<span class="ck yes" title="${esc(t)}">✓ ${esc(c)}</span>`).join('')}${unchecked.map(([c, t]) => `<span class="ck no" title="${esc(t)}: not checked">${esc(c)}</span>`).join('')}</div>`;
+      body += `<div class="t-checks">${checked.length ? `<span class="lbl">Checked</span> ${checked.map(([c, t]) => `<span class="ck yes">${modeName(c, t)}</span>`).join('')}` : ''}${unchecked.length ? ` <span class="lbl">Not checked</span> ${unchecked.map(([c, t]) => `<span class="ck no">${modeName(c, t)}</span>`).join('')}` : ''}</div>`;
     if ((r.caveats || []).length) body += `<ul class="t-caveats">${r.caveats.map(c => `<li><b>${esc(c.category)}</b> ${md(c.note, true)}</li>`).join('')}</ul>`;
     if (r.rationale) body += `<div class="t-text">${md(r.rationale)}</div>`;
     if (r.fix) body += `<div class="t-text"><span class="lbl">Suggested fix</span><pre>${esc(r.fix)}</pre></div>`;
@@ -176,7 +178,7 @@ const RV = (() => {
       <p class="muted small">Reviewers are not ranked. Where they disagree, both views are shown.</p></section>`;
   }
 
-  return {MODES, CATEGORY, TITLE, STATE, ACTION, SWITCHES, DEFAULT_POLICY, LETTER, STATE_CHIP, WHY, policyKey, policyIndex,
+  return {MODES, modeName, CATEGORY, TITLE, STATE, ACTION, SWITCHES, DEFAULT_POLICY, LETTER, STATE_CHIP, WHY, policyKey, policyIndex,
     loadPolicy, savePolicy, policyPanel, when, gh, who, formUrl, statusActions, reviewButtons, statusChip, stateChip, thread,
     tally, checklist, activity, wireActivity, reviewers};
 })();
