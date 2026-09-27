@@ -154,6 +154,7 @@ def build(opt: Options) -> dict:
         scope_ids, pulled = {d.id for d in project if d.name not in deprecated}, set()
     scope = [d for d in project if d.id in scope_ids]
     scope_set = {d.id for d in scope}
+    by_name_scope = {d.name: d for d in scope}
 
     # --- modules and chapters --------------------------------------------------------------------
     mod_rows = {m["name"]: m for m in ds.modules}
@@ -382,6 +383,11 @@ def build(opt: Options) -> dict:
         "changes": changes.summary if changes else None,
         # Every definition's pins in short, and the proposed tests still open.
         "pins": {d.name: pins.summary(d.name) for d in scope if not d.is_prop},
+        # Each characterized definition of the site, with the uniqueness theorems of its complete
+        # characterizations: the graph's second view goes through them instead of the construction.
+        "characterizedBy": {str(by_name_scope[t].id): ids for t, cs in pins.chars.items() if t in by_name_scope
+                            for ids in [sorted({by_name_scope[u["decl"]].id for c in cs if c["complete"]
+                                                for u in c["uniqueness"] if u["decl"] in by_name_scope})] if ids},
         "wanted": [[d.name, p] for d in scope if not d.is_prop for p in pins.of(d.name) if p["source"] == "wanted"],
         # The evidence store's issue forms, when the site has a store (evidence-store's names).
         "forms": {kind: form["file"] for kind, form in STORE_FORMS.items()} if store is not None else None,

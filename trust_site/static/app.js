@@ -86,6 +86,20 @@ function closure(id) {
   while (stack.length) { const x = stack.pop(); if (seen.has(x)) continue; seen.add(x); for (const t of G[x] || []) if (!seen.has(t)) stack.push(t); }
   closureCache.set(id, seen); return seen;
 }
+// The meaning graph through characterizations: a characterized definition rests on the uniqueness
+// theorems of its characterizations (site.json's characterizedBy) instead of its construction, and a
+// characterization on what its statement says, not on the definition it characterizes.
+let charTarget = null;
+function succVia(x) {
+  const via = S.characterizedBy || {};
+  if (!charTarget) { charTarget = new Map(); for (const [d, ts] of Object.entries(via)) for (const u of ts) charTarget.set(u, +d); }
+  return via[x] || (G[x] || []).filter(u => u !== charTarget.get(x));
+}
+function closureVia(id) {
+  const seen = new Set(), stack = [...succVia(id)];
+  while (stack.length) { const x = stack.pop(); if (seen.has(x)) continue; seen.add(x); for (const u of succVia(x)) if (!seen.has(u)) stack.push(u); }
+  return seen;
+}
 const coverageCache = new Map();
 function beneath(id) {
   if (coverageCache.has(id)) return coverageCache.get(id);
@@ -460,7 +474,10 @@ async function renderDecl(name) {
   } else if (e.edited) h += `<p class="muted" style="font-size:14px">File last edited ${esc(e.edited.date)}.</p>`;
   h += community() ? communityPanel(e, name) : auditControl(name);
   const b = beneath(row[R.ID]);
-  h += `<h3>Dependency graph</h3><div class="graph" id="dg"></div>`;
+  // A second view when a characterized definition is on the way: the meaning graph through the
+  // characterizations, which a reader who trusts their properties can take instead of the constructions.
+  const viaAt = [row[R.ID], ...closure(row[R.ID])].filter(i => (S.characterizedBy || {})[i]);
+  h += `<h3>Dependency graph</h3>${viaAt.length ? `<div class="seg dgviews"><button data-dgview="construction" class="on">As defined</button><button data-dgview="via">Through characterizations</button></div><p class="small muted" id="dgnote"></p>` : ''}<div class="graph" id="dg"></div>`;
   h += `<p><b>Audit surface:</b> ${plural(row[R.DEPS], 'project declaration')}, ${plural(row[R.EXT], 'external constant')}. ${b.total ? `${b.accepted}/${b.total} beneath ${community() ? 'reviewed by the community' : 'accepted'}${b.covered ? ' — covered' : ''}.` : ''}</p>`;
   if (e.outside?.length) h += `<p class="muted">Outside this scoped site: ${e.outside.map(x => `<code>${esc(x)}</code>`).join(', ')}.</p>`;
   if (e.external.length) h += `<details><summary class="muted">The external constants its statement rests on</summary><ul>${e.external.map(([n, p, k]) => `<li><code data-c="${esc(n)}">${esc(n)}</code> <span class="muted">${esc(p)} · ${esc(k)}</span></li>`).join('')}</ul></details>`;
@@ -474,11 +491,24 @@ async function renderDecl(name) {
     // My review from the keyboard: a accept, p problem, q question, u unread.
     document.onkeydown = ev => { if (community() || ['TEXTAREA', 'INPUT', 'SELECT'].includes(ev.target.tagName)) return; const m = {a: 'accept', p: 'problem', q: 'question', u: null};
       if (ev.key in m) { setVerdict(name, m[ev.key]); const box = $('[data-audit]'); if (box) { const fresh = document.createElement('div'); fresh.innerHTML = auditControl(name); box.replaceWith(fresh.firstElementChild); wireAudit($('#main')); } } };
-    const ids = [row[R.ID], ...closure(row[R.ID])];
-    if (ids.length > 600) { $('#dg').innerHTML = `<p class="muted">${plural(ids.length, 'declaration')}: too many to draw.</p>`; return; }
-    const nodes = ids.map(i => { const r = D[idIndex.get(i)]; return {id: i, label: r[R.NAME].split('.').pop(), title: r[R.NAME], kind: r[R.KIND], href: declHref(r[R.NAME]), summary: r[R.SUMMARY], root: i === row[R.ID], sorry: r[R.SORRY] > 0, audit: r[R.NAME]}; });
-    const set = new Set(ids), edges = [];
-    for (const i of ids) for (const t of G[i] || []) if (set.has(t)) edges.push([i, t]);
+    const rootId = row[R.ID];
+    const nameOf = i => D[idIndex.get(i)][R.NAME];
+    const views = {
+      construction: () => { const ids = [rootId, ...closure(rootId)]; return {ids, succ: i => G[i] || []}; },
+      via: () => { const ids = [rootId, ...closureVia(rootId)]; return {ids, succ: succVia}; },
+    };
+    let view = 'construction', force = false;
+    // What a view is: its size, and for the second one what the characterizations leave out and add.
+    const note = () => {
+      const el = $('#dgnote'); if (!el) return;
+      if (view === 'construction') { el.innerHTML = `As defined: what its construction rests on.`; return; }
+      const c = new Set(views.construction().ids), v = new Set(views.via().ids);
+      const out = [...c].filter(i => !v.has(i)), added = [...v].filter(i => !c.has(i));
+      // The main pieces of the constructions first: those resting on the most.
+      const defs = out.filter(i => !/Theorem|Lemma/.test(D[idIndex.get(i)][R.KIND]))
+        .sort((a, b) => closure(b).size - closure(a).size).slice(0, 5);
+      el.innerHTML = `Through the characterizations of ${viaAt.map(i => declLink(nameOf(i))).join(', ')}: each rests on what its characterization says, instead of on its construction. ${plural(v.size, 'declaration')} instead of ${c.size.toLocaleString('en')}: ${plural(out.length, 'declaration')} of the constructions left out${defs.length ? ` (${defs.map(i => `<code>${esc(nameOf(i))}</code>`).join(', ')}${out.length > defs.length ? ', …' : ''})` : ''}, ${added.length.toLocaleString('en')} added.`;
+    };
     // The band: what the statement names directly from outside the project, the toolchain's own
     // basics (`Nat`, `Eq`, …) left out. By default only what comes from an unaudited package — what
     // this result has to be taken on trust for; the audited rest on request, remembered.
@@ -487,14 +517,29 @@ async function renderDecl(name) {
     const audited = direct.filter(([, x]) => pkgs.get(x[1])?.trusted).length;
     let showAudited = false; try { showAudited = localStorage.getItem('trust-site:graph-upstream') === '1'; } catch (err) { }
     const draw = () => {
-      const ns = nodes.slice(), es = edges.slice();
-      direct.filter(([, x]) => showAudited || !pkgs.get(x[1])?.trusted).slice(0, 40).forEach(([n, x], j) => {
-        const id = -1 - j; ns.push({id, label: n.split('.').pop(), title: n, constant: n, kind: x[2], upstream: x[1], trusted: !!pkgs.get(x[1])?.trusted}); es.push([row[R.ID], id]); });
+      note();
+      const {ids, succ} = views[view]();
+      if (ids.length > 600 && !force) {
+        $('#dg').innerHTML = `<p class="muted">${plural(ids.length, 'declaration')}: too many to draw quickly. <button class="btn" id="dgforce">Draw anyway</button></p>`;
+        $('#dgforce').onclick = () => { force = true; draw(); };
+        return;
+      }
+      const set = new Set(ids), es = [];
+      for (const i of ids) for (const u of succ(i)) if (set.has(u)) es.push([i, u]);
+      const ns = ids.map(i => { const r = D[idIndex.get(i)]; return {id: i, label: r[R.NAME].split('.').pop(), title: r[R.NAME], kind: r[R.KIND], href: declHref(r[R.NAME]), summary: r[R.SUMMARY], root: i === rootId, sorry: r[R.SORRY] > 0, audit: r[R.NAME]}; });
+      if (view === 'construction')
+        direct.filter(([, x]) => showAudited || !pkgs.get(x[1])?.trusted).slice(0, 40).forEach(([n, x], j) => {
+          const id = -1 - j; ns.push({id, label: n.split('.').pop(), title: n, constant: n, kind: x[2], upstream: x[1], trusted: !!pkgs.get(x[1])?.trusted}); es.push([rootId, id]); });
       graph($('#dg'), {nodes: ns, edges: es, unit: 'declaration', card: nodeCard, ...AUDIT_GRAPH,
-        extra: audited ? {label: showAudited ? 'Hide audited upstream' : `Show audited upstream (${audited})`, pressed: showAudited,
+        extra: view === 'construction' && audited ? {label: showAudited ? 'Hide audited upstream' : `Show audited upstream (${audited})`, pressed: showAudited,
           onClick: () => { showAudited = !showAudited; try { localStorage.setItem('trust-site:graph-upstream', showAudited ? '1' : '0'); } catch (err) { } draw(); }} : null,
-        caption: `${plural(ids.length, 'declaration')} across the dependency rows; the top row depends on nothing. Click a node to read it here.`});
+        caption: `${plural(ids.length, 'declaration')} across the dependency rows; the top row depends on nothing. ${view === 'via' ? 'A characterized definition points to its characterization. ' : ''}Click a node to read it here.`});
     };
+    document.querySelectorAll('[data-dgview]').forEach(b => b.onclick = () => {
+      view = b.dataset.dgview; force = false;
+      document.querySelectorAll('[data-dgview]').forEach(x => x.classList.toggle('on', x === b));
+      draw();
+    });
     draw();
   }];
 }
