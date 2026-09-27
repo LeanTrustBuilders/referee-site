@@ -383,11 +383,9 @@ def build(opt: Options) -> dict:
         "changes": changes.summary if changes else None,
         # Every definition's pins in short, and the proposed tests still open.
         "pins": {d.name: pins.summary(d.name) for d in scope if not d.is_prop},
-        # Each characterized definition of the site, with the uniqueness theorems of its complete
-        # characterizations: the graph's second view goes through them instead of the construction.
-        "characterizedBy": {str(by_name_scope[t].id): ids for t, cs in pins.chars.items() if t in by_name_scope
-                            for ids in [sorted({by_name_scope[u["decl"]].id for c in cs if c["complete"]
-                                                for u in c["uniqueness"] if u["decl"] in by_name_scope})] if ids},
+        # Each characterized definition of the site, with its complete characterizations, which the
+        # dependency graph can take it through instead of its construction (see characterizations_of).
+        "characterizations": characterizations_of(ds, pins.chars, by_name_scope, scope_set, meaning),
         "wanted": [[d.name, p] for d in scope if not d.is_prop for p in pins.of(d.name) if p["source"] == "wanted"],
         # The evidence store's issue forms, when the site has a store (evidence-store's names).
         "forms": {kind: form["file"] for kind, form in STORE_FORMS.items()} if store is not None else None,
@@ -435,6 +433,38 @@ def build(opt: Options) -> dict:
         (out / "data" / "tips" / f"{k}.json").write_text(json.dumps(by_shard.get(k, {}), **compact), encoding="utf-8")
     return {"decls": len(scope), "modules": len(module_names), "claims": len(cl.claims),
             "warnings": cl.warnings}
+
+
+def characterizations_of(ds: Dataset, chars: dict, by_name: dict, scope: set, meaning: dict) -> dict:
+    """Each characterized definition in scope (by id), with each complete characterization: its
+    uniqueness theorem, the structure it characterizes the definition with (the definition's own
+    instances the theorem's statement uses: `Real.instMul`, `Real.instLE`…), the relation, and where it
+    holds (its assumptions, variables, and the arguments it fixes)."""
+    try:
+        statement = ds.edges("statement")
+    except KeyError:
+        statement = {}
+    out: dict[str, list] = {}
+    for target, cs in chars.items():
+        d = by_name.get(target)
+        if d is None:
+            continue
+        entries = []
+        for c in cs:
+            if not c["complete"]:
+                continue
+            for u in c["uniqueness"]:
+                thm = by_name.get(u["decl"])
+                if thm is None:
+                    continue
+                structure = sorted(x for x in meaning.get(thm.id, ()) if x in scope and x != d.id
+                                   and ds.decls[x].kind == "instance" and d.id in statement.get(x, ()))
+                entries.append({"thm": thm.id, "structure": structure, "relation": u["relation"],
+                                "context": c.get("context", []), "variables": c.get("variables", []),
+                                "specialized": c.get("specialized", []), "assuming": c.get("assuming", [])})
+        if entries:
+            out[str(d.id)] = entries
+    return out
 
 
 def file_dates(root: Path | None, paths: set[str]) -> dict[str, dict]:

@@ -247,3 +247,5 @@ body.anat-expanded .anat .exp { display: block; }
 .community h3 { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .cov li { margin: 5px 0; }
 .audit [hidden] { display: none !important; }   /* the form sets display on its parts: hidden must win */
+ul.dgsubs { margin: 4px 0; padding-left: 18px; }
+ul.dgsubs li { margin: 2px 0; }

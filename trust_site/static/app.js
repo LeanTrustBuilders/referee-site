@@ -79,21 +79,18 @@ function accepted(id) {
   return v.verdict === 'accept' && !v.stale;
 }
 const idIndex = new Map();
+// Everything reachable from `roots` by `succ`, the roots included.
+function reach(roots, succ) {
+  const seen = new Set(roots), stack = [...roots];
+  while (stack.length) for (const u of succ(stack.pop())) if (!seen.has(u)) { seen.add(u); stack.push(u); }
+  return seen;
+}
 const closureCache = new Map();
 function closure(id) {
   if (closureCache.has(id)) return closureCache.get(id);
   const seen = new Set(), stack = [...(G[id] || [])];
   while (stack.length) { const x = stack.pop(); if (seen.has(x)) continue; seen.add(x); for (const t of G[x] || []) if (!seen.has(t)) stack.push(t); }
   closureCache.set(id, seen); return seen;
-}
-// The meaning graph from a characterization of one definition: what the characterization's
-// statement rests on (its property, its relation, where it holds), never entering the definition it
-// characterizes. Everything below stays as defined: another definition's characterization may hold
-// on a smaller domain (the integral of real functions only), so it is never substituted.
-function closureAvoiding(seeds, avoid) {
-  const seen = new Set(), stack = [...seeds];
-  while (stack.length) { const x = stack.pop(); if (x === avoid || seen.has(x)) continue; seen.add(x); for (const u of G[x] || []) if (!seen.has(u)) stack.push(u); }
-  return seen;
 }
 const coverageCache = new Map();
 function beneath(id) {
@@ -356,7 +353,7 @@ function pinItem(p) {
   const kind = `<span class="muted">${esc(PIN_KIND[p.kind] || p.kind)}</span>`;
   const who = p.by ? ` <span class="muted small">· ${p.source === 'wanted' ? 'proposed' : 'listed'} by ${esc(p.by.label || p.by.login)}${p.at ? `, ${esc(p.at.slice(0, 10))}` : ''}${p.url ? ` · <a href="${esc(p.url)}" target="_blank" rel="noopener">thread</a>` : ''}</span>` : '';
   if (p.kind === 'unit test') return `<li>${kind} ${PIN_RESULT[p.result] || ''} <a href="https://github.com/${esc(S.repo)}/blob/${esc(S.commit)}/${esc(p.path)}#L${p.line[0]}-L${p.line[1]}">${esc(p.path)}, line ${p.line[0]}</a><pre class="pin-stmt">${esc(p.statement)}</pre></li>`;
-  if (p.kind === 'characterization') return `<li>${kind} by ${declLink(p.decl)}${p.comment ? ` (${md(p.comment, true)})` : ''}: existence ${p.existence.map(x => declLink(x)).join(', ') || '<i>missing</i>'}; uniqueness ${p.uniqueness.map(u => declLink(u.decl) + (u.relation ? ` <span class="muted">up to <code>${esc(u.relation)}</code></span>` : '')).join(', ') || '<i>missing</i>'}${(p.open || []).length ? `; <b>not yet shown for it</b>: ${p.open.map(o => `<code>${esc(o)}</code>`).join(', ')}` : ''}${(p.context || []).length ? ` <span class="muted">(where ${p.context.map(c => `<code>${esc(c)}</code>`).join(', ')})</span>` : ''}${(p.variables || []).length ? ` <span class="muted small">(for ${p.variables.map(c => `<code>${esc(c)}</code>`).join(', ')})</span>` : ''}${(p.assuming || []).length ? ` <span class="muted">(it has the property when ${p.assuming.map(c => `<code>${esc(c)}</code>`).join(', ')})</span>` : ''}</li>`;
+  if (p.kind === 'characterization') return `<li>${kind} by ${declLink(p.decl)}${p.comment ? ` (${md(p.comment, true)})` : ''}: existence ${p.existence.map(x => declLink(x)).join(', ') || '<i>missing</i>'}; uniqueness ${p.uniqueness.map(u => declLink(u.decl) + (u.relation ? ` <span class="muted">up to <code>${esc(u.relation)}</code></span>` : '')).join(', ') || '<i>missing</i>'}${(p.open || []).length ? `; <b>not yet shown for it</b>: ${p.open.map(o => `<code>${esc(o)}</code>`).join(', ')}` : ''}${(p.specialized || []).length ? ` <b>Only for</b> ${p.specialized.map(c => `<code>${esc(c)}</code>`).join(', ')}.` : ''}${(p.context || []).length ? ` <span class="muted">(where ${p.context.map(c => `<code>${esc(c)}</code>`).join(', ')})</span>` : ''}${(p.variables || []).length ? ` <span class="muted small">(for ${p.variables.map(c => `<code>${esc(c)}</code>`).join(', ')})</span>` : ''}${(p.assuming || []).length ? ` <span class="muted">(it has the property when ${p.assuming.map(c => `<code>${esc(c)}</code>`).join(', ')})</span>` : ''}</li>`;
   if (p.source === 'code' || p.source === 'catalogue') return `<li>${kind} ${declLink(p.decl)}${p.comment ? ` <span class="muted">— ${md(p.comment, true)}</span>` : ''}</li>`;
   if (p.source === 'reviewers') return `<li>${kind} ${declLink(p.decl)} ${PIN_RESULT[p.result] || ''}${p.mentions === false ? ' <span class="badge sorry" title="Its statement does not mention this definition, which @[specifies] requires of a specification: it does not count as pinning it down">not about it</span>' : ''}${p.comment ? ` — ${md(p.comment, true)}` : ''}${who}</li>`;
   return `<li>${kind}: ${md(p.comment, true)}${p.statement ? `<pre class="pin-stmt">${esc(p.statement)}</pre>` : ''}${p.catches ? ` <span class="muted small">would catch: ${esc(p.catches)}</span>` : ''}${who}</li>`;
@@ -469,10 +466,10 @@ async function renderDecl(name) {
   } else if (e.edited) h += `<p class="muted" style="font-size:14px">File last edited ${esc(e.edited.date)}.</p>`;
   h += community() ? communityPanel(e, name) : auditControl(name);
   const b = beneath(row[R.ID]);
-  // A second view for a characterized definition, one per characterization: its meaning graph from
-  // the characterization, which a reader who trusts the property can take instead of the construction.
-  const charThms = (S.characterizedBy || {})[row[R.ID]] || [];
-  h += `<h3>Dependency graph</h3>${charThms.length ? `<div class="seg dgviews"><button data-dgview="construction" class="on">As defined</button>${charThms.map(u => `<button data-dgview="${u}">From its characterization by <code>${esc(D[idIndex.get(u)][R.NAME].split('.').pop())}</code></button>`).join('')}</div><p class="small muted" id="dgnote"></p>` : ''}<div class="graph" id="dg"></div>`;
+  // The characterized definitions of this graph: each can be taken from its characterization instead
+  // of its construction, by the reader, one at a time (from the switches here or the node's card).
+  const charsIn = [row[R.ID], ...closure(row[R.ID])].filter(i => (S.characterizations || {})[i]);
+  h += `<h3>Dependency graph</h3>${charsIn.length ? `<div class="seg dgviews" id="dgsubs"></div><p class="small muted" id="dgnote"></p>` : ''}<div class="graph" id="dg"></div>`;
   h += `<p><b>Audit surface:</b> ${plural(row[R.DEPS], 'project declaration')}, ${plural(row[R.EXT], 'external constant')}. ${b.total ? `${b.accepted}/${b.total} beneath ${community() ? 'reviewed by the community' : 'accepted'}${b.covered ? ' — covered' : ''}.` : ''}</p>`;
   if (e.outside?.length) h += `<p class="muted">Outside this scoped site: ${e.outside.map(x => `<code>${esc(x)}</code>`).join(', ')}.</p>`;
   if (e.external.length) h += `<details><summary class="muted">The external constants its statement rests on</summary><ul>${e.external.map(([n, p, k]) => `<li><code data-c="${esc(n)}">${esc(n)}</code> <span class="muted">${esc(p)} · ${esc(k)}</span></li>`).join('')}</ul></details>`;
@@ -488,26 +485,88 @@ async function renderDecl(name) {
       if (ev.key in m) { setVerdict(name, m[ev.key]); const box = $('[data-audit]'); if (box) { const fresh = document.createElement('div'); fresh.innerHTML = auditControl(name); box.replaceWith(fresh.firstElementChild); wireAudit($('#main')); } } };
     const rootId = row[R.ID];
     const nameOf = i => D[idIndex.get(i)][R.NAME];
-    // The construction; or, from a characterization `u`, the definition resting on `u` alone and `u`
-    // on what its statement says, the definition itself not entered again.
-    const view_ = v => v === 'construction'
-      ? {ids: [rootId, ...closure(rootId)], succ: i => G[i] || []}
-      : {ids: [rootId, ...closureAvoiding([+v], rootId)], succ: i => i === rootId ? [+v] : (G[i] || []).filter(u => u !== rootId)};
-    let view = 'construction', force = false;
-    // What a view is: its size, and for the second one what the characterizations leave out and add.
-    const note = () => {
-      const el = $('#dgnote'); if (!el) return;
-      if (view === 'construction') { el.innerHTML = `As defined: what its construction rests on.`; return; }
-      const c = new Set(view_('construction').ids), v = new Set(view_(view).ids);
-      const thm = D[idIndex.get(+view)][R.NAME];
-      const pin = (e.pins || []).find(p => p.kind === 'characterization' && p.uniqueness.some(u => u.decl === thm)) || {};
-      const holds = [...(pin.context || []), ...(pin.assuming || [])];
-      const out = [...c].filter(i => !v.has(i)), added = [...v].filter(i => !c.has(i));
-      // The main pieces of the constructions first: those resting on the most.
-      const defs = out.filter(i => !/Theorem|Lemma/.test(D[idIndex.get(i)][R.KIND]))
-        .sort((a, b) => closure(b).size - closure(a).size).slice(0, 5);
-      el.innerHTML = `From its characterization by ${declLink(thm)}: it rests on what the characterization says, its property and its relation, instead of on its construction; everything below is as defined. The characterization holds ${holds.length ? `where ${holds.map(x => `<code>${esc(x)}</code>`).join(', ')}` : 'without conditions'}${(pin.variables || []).length ? `, for ${pin.variables.map(x => `<code>${esc(x)}</code>`).join(', ')}` : ''}: this view is only as general as that. ${plural(v.size, 'declaration')} instead of ${c.size.toLocaleString('en')}: ${plural(out.length, 'declaration')} of its construction left out${defs.length ? ` (${defs.map(i => `<code>${esc(nameOf(i))}</code>`).join(', ')}${out.length > defs.length ? ', …' : ''})` : ''}, ${added.length.toLocaleString('en')} added.`;
+    const chars = S.characterizations || {};
+    // The definitions the reader takes from a characterization: definition → the characterization.
+    // A definition taken so rests on its characterization's theorem alone, and so do the instances it
+    // is characterized with (ℝ's `instMul`…); the theorem rests on what its statement says, the
+    // definition and those instances excepted. Everything else stays as defined: a characterization
+    // may hold on a smaller domain, and only the reader can judge that it covers this use.
+    const subs = new Map();
+    const graphOf = () => {
+      const via = new Map(), skip = new Map();
+      for (const [d, c] of subs) { via.set(d, c.thm); for (const s of c.structure) via.set(s, c.thm); skip.set(c.thm, new Set([d, ...c.structure])); }
+      const succ = i => via.has(i) ? [via.get(i)] : (G[i] || []).filter(u => !(skip.get(i)?.has(u)));
+      return {ids: [...reach([rootId], succ)], succ};
     };
+    // What a definition's construction is, for saying how much of it a graph still reaches once the
+    // definition is taken from its characterization: what the definition and the instances the
+    // characterization pins rest on, less what anything unrelated to the definition rests on too.
+    // The Cauchy sequences are ℝ's; ℚ's order is not, when something unrelated to ℝ uses it. On a
+    // slice where everything rests on the definition, generic pieces (`abs`) count as its own:
+    // this errs towards showing too much.
+    let rev = null;
+    const ownCache = new Map();
+    const ownOf = (d, c) => {
+      if (ownCache.has(d)) return ownCache.get(d);
+      if (!rev) { rev = new Map(); for (const r of D) for (const u of G[r[R.ID]] || []) { if (!rev.has(u)) rev.set(u, []); rev.get(u).push(r[R.ID]); } }
+      const top = new Set([d, ...c.structure]), out = i => G[i] || [];
+      const below = reach([...top], out); for (const x of top) below.delete(x);
+      const above = reach([d], i => rev.get(i) || []);
+      const shared = reach(D.map(r => r[R.ID]).filter(i => !above.has(i) && !below.has(i)), out);
+      const own = new Set([...below].filter(i => !shared.has(i)));
+      ownCache.set(d, own); return own;
+    };
+    const construction = new Set([rootId, ...closure(rootId)]);
+    const holds = c => {
+      const parts = [];
+      const w = [...(c.context || []), ...(c.assuming || [])];
+      if (w.length) parts.push(`where ${w.map(x => `<code>${esc(x)}</code>`).join(', ')}`);
+      if ((c.specialized || []).length) parts.push(`<b>only for</b> ${c.specialized.map(x => `<code>${esc(x)}</code>`).join(', ')}`);
+      if ((c.variables || []).length) parts.push(`for ${c.variables.map(x => `<code>${esc(x)}</code>`).join(', ')}`);
+      return parts.length ? parts.join('; ') : 'without conditions';
+    };
+    const toggle = (d, k) => { if (subs.has(d) && k == null) subs.delete(d); else subs.set(d, chars[d][k || 0]); force = false; draw(); };
+    // The switches: the characterized definitions of the graph as drawn (a characterization's statement
+    // can bring in others), and those taken from their characterization.
+    const paintSubs = ids => {
+      const box = $('#dgsubs'); if (!box) return;
+      const here = [...new Set([...ids.filter(i => chars[i]), ...subs.keys()])];
+      box.innerHTML = `<button data-dgclear class="${subs.size ? '' : 'on'}">As defined</button>` + here.map(d =>
+        `<button data-dgsub="${d}" class="${subs.has(d) ? 'on' : ''}" title="Take it from its characterization instead of its construction">${esc(nameOf(d).split('.').pop())} from its characterization</button>`).join('');
+      box.querySelector('[data-dgclear]').onclick = () => { subs.clear(); force = false; draw(); };
+      box.querySelectorAll('[data-dgsub]').forEach(b => b.onclick = () => toggle(+b.dataset.dgsub));
+    };
+    // What the graph is: the substitutions in force, each with where its characterization holds, and
+    // what they leave out of the constructions and add.
+    const note = (ids, succ) => {
+      const el = $('#dgnote'); if (!el) return;
+      if (!subs.size) { el.innerHTML = `As defined: what the constructions rest on. ${plural(charsIn.length, 'definition')} of this graph ${charsIn.length === 1 ? 'has' : 'have'} a characterization it can be taken from instead: the switches above, or the node's card.`; return; }
+      const v = new Set(ids), out = [...construction].filter(i => !v.has(i)), added = [...v].filter(i => !construction.has(i));
+      const defs = out.filter(i => !/Theorem|Lemma/.test(D[idIndex.get(i)][R.KIND])).sort((a, b) => closure(b).size - closure(a).size).slice(0, 5);
+      // What of each construction the graph still reaches, and through which definitions: those the
+      // characterization does not name (ℝ's `commRing`, whose casts are defined on the construction).
+      const left = (d, c) => {
+        const needs = reach([c.thm], succ), own = ownOf(d, c);
+        const still = new Set([...own].filter(i => v.has(i) && !needs.has(i)));
+        if (!still.size) return 'None of its construction is left in the graph.';
+        const within = i => succ(i).filter(u => still.has(u));
+        const through = ids.filter(i => !own.has(i) && within(i).length).map(i => [i, reach(within(i), within).size]).sort((a, b) => b[1] - a[1]);
+        const names = [...still].map(nameOf).sort().slice(0, 4);
+        return `Still in the graph from its construction: ${plural(still.size, 'declaration')} (${names.map(n => `<code>${esc(n)}</code>`).join(', ')}${still.size > names.length ? ', …' : ''}), through ${through.slice(0, 6).map(([i, k]) => `${declLink(nameOf(i))} (${k})`).join(', ')}${through.length > 6 ? ', …' : ''}: definitions of their own, which the characterization does not name.`;
+      };
+      el.innerHTML = `<ul class="dgsubs">${[...subs].map(([d, c]) => `<li>${declLink(nameOf(d))} from its characterization by ${declLink(nameOf(c.thm))}, ${/^(∃|Nonempty)/.test(c.relation) ? 'up to isomorphism' : 'up to'} <code>${esc(c.relation)}</code>, which holds ${holds(c)}.${holds(c) === 'without conditions' ? '' : ' <span class="muted">This graph is only as general as that.</span>'} ${left(d, c)}</li>`).join('')}</ul>${plural(v.size, 'declaration')} instead of ${construction.size.toLocaleString('en')}: ${plural(out.length, 'declaration')} of the constructions left out${defs.length ? ` (${defs.map(i => `<code>${esc(nameOf(i))}</code>`).join(', ')}${out.length > defs.length ? ', …' : ''})` : ''}, ${added.length.toLocaleString('en')} added.`;
+    };
+    // In a node's card: take it from its characterization, or back.
+    const cardControl = id => {
+      const cs = chars[id]; if (!cs) return '';
+      if (subs.has(id)) return `<p><button class="btn" data-card-unsub="${id}">Back to its construction</button> <span class="muted small">taken from its characterization by <code>${esc(nameOf(subs.get(id).thm))}</code></span></p>`;
+      return cs.map((c, k) => `<p><button class="btn" data-card-sub="${id}:${k}">Take it from its characterization by <code>${esc(nameOf(c.thm).split('.').pop())}</code></button> <span class="muted small">which holds ${holds(c)}</span></p>`).join('');
+    };
+    $('#dg').addEventListener('click', ev => {
+      const s = ev.target.closest('[data-card-sub]'), u = ev.target.closest('[data-card-unsub]');
+      if (s) { const [d, k] = s.dataset.cardSub.split(':').map(Number); toggle(d, k); }
+      if (u) toggle(+u.dataset.cardUnsub);
+    });
     // The band: what the statement names directly from outside the project, the toolchain's own
     // basics (`Nat`, `Eq`, …) left out. By default only what comes from an unaudited package — what
     // this result has to be taken on trust for; the audited rest on request, remembered.
@@ -515,9 +574,11 @@ async function renderDecl(name) {
     const direct = (e.directExternal || []).map(n => [n, (e.external.find(x => x[0] === n) || [n, '', ''])]).filter(([, x]) => x[1] && !pkgs.get(x[1])?.toolchain);
     const audited = direct.filter(([, x]) => pkgs.get(x[1])?.trusted).length;
     let showAudited = false; try { showAudited = localStorage.getItem('trust-site:graph-upstream') === '1'; } catch (err) { }
+    let force = false;
     const draw = () => {
-      note();
-      const {ids, succ} = view_(view);
+      const {ids, succ} = graphOf();
+      paintSubs(ids);
+      note(ids, succ);
       if (ids.length > 600 && !force) {
         $('#dg').innerHTML = `<p class="muted">${plural(ids.length, 'declaration')}: too many to draw quickly. <button class="btn" id="dgforce">Draw anyway</button></p>`;
         $('#dgforce').onclick = () => { force = true; draw(); };
@@ -526,19 +587,15 @@ async function renderDecl(name) {
       const set = new Set(ids), es = [];
       for (const i of ids) for (const u of succ(i)) if (set.has(u)) es.push([i, u]);
       const ns = ids.map(i => { const r = D[idIndex.get(i)]; return {id: i, label: r[R.NAME].split('.').pop(), title: r[R.NAME], kind: r[R.KIND], href: declHref(r[R.NAME]), summary: r[R.SUMMARY], root: i === rootId, sorry: r[R.SORRY] > 0, audit: r[R.NAME]}; });
-      if (view === 'construction')
+      if (!subs.size)
         direct.filter(([, x]) => showAudited || !pkgs.get(x[1])?.trusted).slice(0, 40).forEach(([n, x], j) => {
           const id = -1 - j; ns.push({id, label: n.split('.').pop(), title: n, constant: n, kind: x[2], upstream: x[1], trusted: !!pkgs.get(x[1])?.trusted}); es.push([rootId, id]); });
-      graph($('#dg'), {nodes: ns, edges: es, unit: 'declaration', card: nodeCard, ...AUDIT_GRAPH,
-        extra: view === 'construction' && audited ? {label: showAudited ? 'Hide audited upstream' : `Show audited upstream (${audited})`, pressed: showAudited,
+      graph($('#dg'), {nodes: ns, edges: es, unit: 'declaration', ...AUDIT_GRAPH,
+        card: nodeCard, control: n => n.id >= 0 ? cardControl(n.id) : '',
+        extra: !subs.size && audited ? {label: showAudited ? 'Hide audited upstream' : `Show audited upstream (${audited})`, pressed: showAudited,
           onClick: () => { showAudited = !showAudited; try { localStorage.setItem('trust-site:graph-upstream', showAudited ? '1' : '0'); } catch (err) { } draw(); }} : null,
-        caption: `${plural(ids.length, 'declaration')} across the dependency rows; the top row depends on nothing. ${view !== 'construction' ? 'The definition points to its characterization. ' : ''}Click a node to read it here.`});
+        caption: `${plural(ids.length, 'declaration')} across the dependency rows; the top row depends on nothing. ${subs.size ? 'A definition taken from its characterization points to it. ' : ''}Click a node to read it here.`});
     };
-    document.querySelectorAll('[data-dgview]').forEach(b => b.onclick = () => {
-      view = b.dataset.dgview; force = false;
-      document.querySelectorAll('[data-dgview]').forEach(x => x.classList.toggle('on', x === b));
-      draw();
-    });
     draw();
   }];
 }

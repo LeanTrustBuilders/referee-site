@@ -87,7 +87,8 @@ class BuildTests(unittest.TestCase):
             # the graph's second view goes through characterizations: `double` through the uniqueness
             # theorem of its characterization by `IsDouble`
             ids = {row[1]: row[0] for row in json.loads((out / "data" / "decls.json").read_text())}
-            self.assertEqual(site["characterizedBy"][str(ids[F + "double"])], [ids[F + "IsDouble.unique"]])
+            [c] = site["characterizations"][str(ids[F + "double"])]
+            self.assertEqual((c["thm"], c["structure"]), (ids[F + "IsDouble.unique"], []))
             self.assertEqual(double["change"]["class"], "body")
             self.assertEqual(double["provenance"]["changes"], 2)
 
