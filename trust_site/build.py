@@ -27,6 +27,7 @@ from pathlib import Path
 from evidence_core import Dataset, Evidence
 from evidence_core import analysis
 from evidence_core import claims as claims_mod
+from evidence_core import docs as docs_mod
 from evidence_core import ledger as ledger_mod
 from evidence_core import records as evrec
 from evidence_core.changes import compare
@@ -116,6 +117,8 @@ def build(opt: Options) -> dict:
 
     # --- claims and scope -------------------------------------------------------------------
     store = Store.load(opt.evidence) if opt.evidence and Path(opt.evidence).is_dir() else None
+    deprecated = docs_mod.deprecated(ds)          # from the attributes facet, if the dataset has it
+    resolver = docs_mod.Resolver(ds)
     cl = claims_mod.resolve(opt.source, names, explicit=opt.claim or None, comparator_dir=opt.comparator,
                             annotations=ann["claim"], store_claims=(store.config.get("claims") if store else None))
     mode = "only" if opt.only else ("claims" if opt.claims_only else "full")
@@ -128,7 +131,8 @@ def build(opt: Options) -> dict:
             raise SystemExit("--claims-only: the project names no claims, so the scoped site would be empty")
         scope_ids, pulled = analysis.claim_scope(ds, seeds)
     else:
-        scope_ids, pulled = {d.id for d in project}, set()
+        # A deprecated declaration is kept only so that older code compiles: not what the library puts forward.
+        scope_ids, pulled = {d.id for d in project if d.name not in deprecated}, set()
     scope = [d for d in project if d.id in scope_ids]
     scope_set = {d.id for d in scope}
 
@@ -232,6 +236,8 @@ def build(opt: Options) -> dict:
             "users": sorted(users.get(d.id, [])),
             "sorry": so.uses, "ownSorry": so.own, "sorryVia": list(so.via) if so.uses and not so.own else [],
             "kernel": kernel_of(d.name),
+            # What its attributes say: where else it is described, and whether it is deprecated.
+            "links": docs_mod.links(ds, d.name, resolver).as_json() or None,
             "axioms": analysis.extra_axioms(ds, d.name),
             "change": changes.detail.get(d.name) if changes else None,
             "reviews": reviews.get(d.name, []),
@@ -295,6 +301,7 @@ def build(opt: Options) -> dict:
     theorems = [d for d in scope if d.is_prop and keyword.get(d.name) == "theorem"]
     counts = {
         "decls": len(scope), "library": len(project),
+        "deprecated": sum(1 for d in project if d.name in deprecated), "deprecatedShown": sum(1 for d in scope if d.name in deprecated),
         "theorems": len(theorems), "lemmas": sum(1 for d in scope if d.is_prop) - len(theorems),
         "definitions": sum(1 for d in scope if not d.is_prop),
         "sorry": sum(1 for d in scope if sorry[d.name].uses),

@@ -291,5 +291,30 @@ class PinsTests(unittest.TestCase):
             self.assertIn(("wanted", "challenge"), [(p["source"], p["kind"]) for p in cards[F + "triple"]["pins"]])
 
 
+class AttributeTests(unittest.TestCase):
+    """What the attributes say (facet `attributes`): links, and deprecated declarations left out."""
+
+    def test_links_and_deprecation(self):
+        import shutil
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            ds_dir = tmp / "ds"
+            shutil.copytree(V / "fixture-b", ds_dir)
+            meta = json.loads((ds_dir / "meta.json").read_text())
+            meta["facets"].append({"name": "attributes", "file": "facets/attributes.jsonl", "schema": "attributes/1", "count": 2})
+            (ds_dir / "meta.json").write_text(json.dumps(meta))
+            (ds_dir / "facets" / "attributes.jsonl").write_text(
+                json.dumps({"decl": F + "double", "attributes": [{"name": "stacks", "args": '09GA "doubling"'},
+                                                                 {"name": "wikidata", "args": "Q616608"}]}) + "\n" +
+                json.dumps({"decl": F + "triple_comm", "attributes": [{"name": "deprecated", "args": 'triple_pos (since := "2026-01-01")'}]}) + "\n")
+            build(Options(dataset=ds_dir, out=tmp / "site", source=V / "source-b"))
+            site = json.loads((tmp / "site" / "data" / "site.json").read_text())
+            entries = {e["name"]: e for p in (tmp / "site" / "data" / "m").glob("*.json") for e in json.loads(p.read_text())}
+            self.assertNotIn(F + "triple_comm", entries)                 # left out of the site
+            self.assertEqual((site["counts"]["deprecated"], site["counts"]["deprecatedShown"]), (1, 0))
+            self.assertEqual(entries[F + "double"]["links"], {"stacks": [{"tag": "09GA", "comment": "doubling"}], "wikidata": ["Q616608"]})
+            self.assertIsNone(entries[F + "triple"]["links"])
+
+
 if __name__ == "__main__":
     unittest.main()

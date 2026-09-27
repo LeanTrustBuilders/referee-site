@@ -207,6 +207,22 @@ function kernelLine(e) {
   const proof = t && t.kernel === 'ok' ? ' Its proof was checked the same way, against everything it uses.' : t && t.kernel === 'missing' ? ` Its proof, though, needs ${t.missing.map(x => declLink(x)).join(', ')} beyond what its proof dependencies list.` : '';
   return `<p>✓ <b>Its dependencies are complete:</b> Lean's kernel accepted it with nothing but what this page says it rests on.${proof}</p>`;
 }
+/* ---------- what its attributes say (evidence-core's docs.links) ---------- */
+const WIKIPEDIA = q => `https://www.wikidata.org/wiki/Special:GoToLinkedPage/enwiki/${encodeURIComponent(q)}`;
+function linksHtml(e) {
+  const l = e.links || {};
+  const out = [...(l.stacks || []).map(t => `<a href="https://stacks.math.columbia.edu/tag/${encodeURIComponent(t.tag)}" target="_blank" rel="noopener">the Stacks project, tag ${esc(t.tag)}</a>${t.comment ? ` <span class="muted">(${esc(t.comment)})</span>` : ''}`),
+    ...(l.kerodon || []).map(t => `<a href="https://kerodon.net/tag/${encodeURIComponent(t.tag)}" target="_blank" rel="noopener">Kerodon, tag ${esc(t.tag)}</a>${t.comment ? ` <span class="muted">(${esc(t.comment)})</span>` : ''}`),
+    ...(l.wikidata || []).map(q => `<a href="${WIKIPEDIA(q)}" target="_blank" rel="noopener">Wikipedia</a> <span class="muted">(Wikidata ${esc(q)})</span>`)];
+  return out.length ? `<p class="also"><b>Also described in</b> ${out.join(' · ')}: what to compare it with, as its authors say.</p>` : '';
+}
+function deprecationHtml(e) {
+  const d = (e.links || {}).deprecated;
+  if (!d) return '';
+  const x = d === true ? {} : d;
+  return `<div class="changebar"><span class="badge sorry">deprecated</span> Kept only so that older code still compiles${x.since ? `, since ${esc(x.since)}` : ''}.${x.replacement ? ` Use ${declLink(x.replacement)} instead.` : ''}${x.message ? ` <span class="muted">“${esc(x.message)}”</span>` : ''}</div>`;
+}
+
 /* ---------- what pins a definition down (evidence-core's pins) ---------- */
 const PIN_KIND = {specifies: 'specification', example: 'example', nonexample: 'non-example', characterization: 'characterization',
   'unit test': 'unit test', test: 'test', 'met challenge': 'proposed test, met by', challenge: 'proposed test'};
@@ -244,7 +260,8 @@ function renderHome() {
   const c = S.counts;
   let h = pagerFor('#/') + `<h1 style="text-align:center">${esc(S.title)}</h1>` + scopeNotice();
   const proved = c.sorry === 0 ? `All of them are proved with no <code>sorry</code> anywhere.` : `${plural(c.sorry, 'of them depends', 'of them depend')} on a <code>sorry</code> (see <a href="#/sorries">Sorries</a>).`;
-  h += `<p class="lead"><code>${esc(S.root)}</code> has ${plural(c.decls, 'declaration')}: <a href="#/theorems">${plural(c.theorems, 'theorem')}</a>, ${plural(c.lemmas, 'lemma')} and ${plural(c.definitions, 'definition')}. ${proved} ${kernelSentence()}</p>`;
+  const leftOut = S.scope.mode === 'full' && c.deprecated > c.deprecatedShown ? ` <span class="muted">${plural(c.deprecated - c.deprecatedShown, 'deprecated declaration is', 'deprecated declarations are')} left out: kept only so that older code compiles.</span>` : '';
+  h += `<p class="lead"><code>${esc(S.root)}</code> has ${plural(c.decls, 'declaration')}: <a href="#/theorems">${plural(c.theorems, 'theorem')}</a>, ${plural(c.lemmas, 'lemma')} and ${plural(c.definitions, 'definition')}. ${proved} ${kernelSentence()}${leftOut}</p>`;
   const cl = S.claims;
   if (cl.claims.length) {
     const src = cl.sources.includes('formalization.yaml') ? 'in a <code>formalization.yaml</code>' : cl.sources.includes('comparator') ? 'in its Comparator setup' : cl.sources.includes('annotation') ? 'with <code>@[claim]</code>' : 'on the command line';
@@ -296,7 +313,7 @@ async function renderDecl(name) {
   const next = k < entries.length - 1 ? [declHref(entries[k + 1].name), entries[k + 1].name] : null;
   let h = pager(prev, next) + `<h1 class="decl">${esc(name)}</h1>`;
   if (e.change) h += `<div class="changebar"><span class="badge ${e.change.class}">${CHANGE_LABEL[e.change.class]}</span> since the previous build${e.change.was ? ` (was <code>${esc(e.change.was)}</code>)` : ''}${e.change.causes?.length ? `: rewritten beneath it: ${e.change.causes.map(c => declLink(c)).join(', ')}` : ''}</div>`;
-  h += cardHtml(e);
+  h += deprecationHtml(e) + cardHtml(e) + linksHtml(e);
   h += '<div class="facts">';
   if (e.claim) h += `<p><b>Claim</b>${e.claim.label ? ` — ${esc(e.claim.label)}` : ''}, from ${esc(e.claim.source)}. <a href="#/claims">All claims</a>.</p>`;
   if (e.specifies.length) h += `<p><b>Part of the specification of</b> ${e.specifies.map(s => declLink(s.target) + (s.comment ? ` <span class="muted">(${md(s.comment, true)})</span>` : '')).join(', ')}.</p>`;

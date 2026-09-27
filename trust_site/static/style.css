@@ -225,3 +225,4 @@ body.anat-expanded .anat .exp { display: block; }
 .pins { margin: 4px 0 12px; padding-left: 20px; }
 .pins li { margin: 4px 0; }
 .pin-stmt { margin: 4px 0; padding: 6px 10px; font-size: 12.5px; white-space: pre-wrap; }
+.also { font-size: 14.5px; margin: 10px 0; }

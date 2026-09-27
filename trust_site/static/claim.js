@@ -149,6 +149,15 @@ function checklist(n) {
     return `<div class="cm ${by.length ? 'yes' : 'no'}" title="${esc(t)}"><span class="code">${esc(c)}</span><span class="what">${esc(t)}</span><span class="by">${by.length ? by.map(r => esc(r.by.kind === 'agent' ? (r.by.agent?.tool || 'AI') : r.by.login)).join(', ') : 'nobody yet'}</span></div>`;
   }).join('')}</div>`;
 }
+// Where else it is described, as its attributes say (@[stacks], @[kerodon], @[wikidata]); and a deprecation.
+function alsoIn(e) {
+  const l = (e && e.links) || {};
+  const out = [...(l.stacks || []).map(t => `<a href="https://stacks.math.columbia.edu/tag/${encodeURIComponent(t.tag)}" target="_blank" rel="noopener">Stacks project, tag ${esc(t.tag)}</a>`),
+    ...(l.kerodon || []).map(t => `<a href="https://kerodon.net/tag/${encodeURIComponent(t.tag)}" target="_blank" rel="noopener">Kerodon, tag ${esc(t.tag)}</a>`),
+    ...(l.wikidata || []).map(q => `<a href="https://www.wikidata.org/wiki/Special:GoToLinkedPage/enwiki/${encodeURIComponent(q)}" target="_blank" rel="noopener">Wikipedia</a>`)];
+  const dep = l.deprecated ? `<p class="warnline">Deprecated${l.deprecated.since ? ` since ${esc(l.deprecated.since)}` : ''}${l.deprecated.replacement ? `: use ${declLink(l.deprecated.replacement)}` : ''}.</p>` : '';
+  return dep + (out.length ? `<p class="small">Also described in ${out.join(' · ')}</p>` : '');
+}
 // What pins a definition down (evidence-core's pins): in the code, from reviewers, wanted.
 const PIN_KIND = {specifies: 'specification', example: 'example', nonexample: 'non-example', characterization: 'characterized by',
   'unit test': 'unit test', test: 'test', 'met challenge': 'proposed test, met by', challenge: 'proposed test'};
@@ -170,7 +179,7 @@ function declSection(n) {
   const disputed = st === 'disputed' ? `<div class="notice bad">Reviewers disagree: an acceptance and an open problem stand side by side. Read both.</div>` : '';
   return `<article class="cp-decl" id="${slug(n)}">
     <header><span class="chip ${cls}">${label}</span><h3>${esc(n)}</h3><span class="tally">${tally(n)}</span></header>
-    ${disputed}${e ? cardHtml(e) : ''}${specsOf(e)}
+    ${disputed}${e ? cardHtml(e) : ''}${alsoIn(e)}${specsOf(e)}
     <details class="cp-checklist"${reviewsOf(n).length ? ' open' : ''}><summary>What reviewers checked</summary>${checklist(n)}</details>
     ${rs.length ? `<div class="cp-threads">${rs.map(thread).join('')}</div>` : ''}
     ${actions(n)}</article>`;
