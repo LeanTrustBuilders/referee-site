@@ -347,14 +347,22 @@ function pinItem(p) {
   const kind = `<span class="muted">${esc(PIN_KIND[p.kind] || p.kind)}</span>`;
   const who = p.by ? ` <span class="muted small">· ${p.source === 'wanted' ? 'proposed' : 'listed'} by ${esc(p.by.label || p.by.login)}${p.at ? `, ${esc(p.at.slice(0, 10))}` : ''}${p.url ? ` · <a href="${esc(p.url)}" target="_blank" rel="noopener">thread</a>` : ''}</span>` : '';
   if (p.kind === 'unit test') return `<li>${kind} ${PIN_RESULT[p.result] || ''} <a href="https://github.com/${esc(S.repo)}/blob/${esc(S.commit)}/${esc(p.path)}#L${p.line[0]}-L${p.line[1]}">${esc(p.path)}, line ${p.line[0]}</a><pre class="pin-stmt">${esc(p.statement)}</pre></li>`;
-  if (p.kind === 'characterization') return `<li>${kind} by ${declLink(p.decl)}${p.comment ? ` (${md(p.comment, true)})` : ''}: existence ${p.existence.map(x => declLink(x)).join(', ') || '<i>missing</i>'}; uniqueness ${p.uniqueness.map(u => declLink(u.decl) + (u.relation ? ` <span class="muted">up to <code>${esc(u.relation)}</code></span>` : '')).join(', ') || '<i>missing</i>'}${(p.open || []).length ? `; <b>not yet shown for it</b>: ${p.open.map(o => `<code>${esc(o)}</code>`).join(', ')}` : ''}${(p.context || []).length ? ` <span class="muted">(where ${p.context.map(c => `<code>${esc(c)}</code>`).join(', ')})</span>` : ''}${(p.assuming || []).length ? ` <span class="muted">(it has the property when ${p.assuming.map(c => `<code>${esc(c)}</code>`).join(', ')})</span>` : ''}</li>`;
-  if (p.source === 'code') return `<li>${kind} ${declLink(p.decl)}${p.comment ? ` <span class="muted">— ${md(p.comment, true)}</span>` : ''}</li>`;
+  if (p.kind === 'characterization') return `<li>${kind} by ${declLink(p.decl)}${p.comment ? ` (${md(p.comment, true)})` : ''}: existence ${p.existence.map(x => declLink(x)).join(', ') || '<i>missing</i>'}; uniqueness ${p.uniqueness.map(u => declLink(u.decl) + (u.relation ? ` <span class="muted">up to <code>${esc(u.relation)}</code></span>` : '')).join(', ') || '<i>missing</i>'}${(p.open || []).length ? `; <b>not yet shown for it</b>: ${p.open.map(o => `<code>${esc(o)}</code>`).join(', ')}` : ''}${(p.context || []).length ? ` <span class="muted">(where ${p.context.map(c => `<code>${esc(c)}</code>`).join(', ')})</span>` : ''}${(p.variables || []).length ? ` <span class="muted small">(for ${p.variables.map(c => `<code>${esc(c)}</code>`).join(', ')})</span>` : ''}${(p.assuming || []).length ? ` <span class="muted">(it has the property when ${p.assuming.map(c => `<code>${esc(c)}</code>`).join(', ')})</span>` : ''}</li>`;
+  if (p.source === 'code' || p.source === 'catalogue') return `<li>${kind} ${declLink(p.decl)}${p.comment ? ` <span class="muted">— ${md(p.comment, true)}</span>` : ''}</li>`;
   if (p.source === 'reviewers') return `<li>${kind} ${declLink(p.decl)} ${PIN_RESULT[p.result] || ''}${p.mentions === false ? ' <span class="badge sorry" title="Its statement does not mention this definition, which @[specifies] requires of a specification: it does not count as pinning it down">not about it</span>' : ''}${p.comment ? ` — ${md(p.comment, true)}` : ''}${who}</li>`;
   return `<li>${kind}: ${md(p.comment, true)}${p.statement ? `<pre class="pin-stmt">${esc(p.statement)}</pre>` : ''}${p.catches ? ` <span class="muted small">would catch: ${esc(p.catches)}</span>` : ''}${who}</li>`;
+}
+// Where a definition is meant to apply, as its authors or a catalogue declared it (@[domain]):
+// outside it, the value is a junk value or a convention.
+function domainHtml(e) {
+  const d = e.domain; if (!d) return '';
+  const who = d.source === 'catalogue' ? 'declared by a catalogue, from outside the library' : 'declared by its authors';
+  return `<h3>Where it is meant to apply</h3><pre class="pin-stmt">${esc(d.statement)}</pre>${d.note ? `<p>${md(d.note, true)}</p>` : ''}<p class="muted small">${who}, with <code>@[domain]</code>. Outside it, what the definition returns is a default value, not the intended one.</p>`;
 }
 function pinsHtml(e) {
   const pins = e.pins || [];
   const groups = [['code', 'In the code', 'what its authors wrote: theorems marked as saying what it means (whose shapes Lean checks), and the examples that use it'],
+    ['catalogue', 'From a catalogue', 'theorems written outside the library, about it: checked by Lean like the library\'s own, but not written by its authors'],
     ['reviewers', 'From reviewers', 'declarations of the library listed as its tests; each passes while it is there without sorry'],
     ['wanted', 'Wanted', 'tests someone proposed and nobody has written yet']];
   let h = `<h3>What pins it down</h3>`;
@@ -431,7 +439,7 @@ async function renderDecl(name) {
   h += '<div class="facts">';
   if (e.claim) h += `<p><b>Claim</b>${e.claim.label ? ` — ${esc(e.claim.label)}` : ''}, from ${esc(e.claim.source)}. <a href="#/claims">All claims</a>.</p>`;
   if (e.specifies.length) h += `<p><b>Part of the specification of</b> ${e.specifies.map(s => declLink(s.target) + (s.comment ? ` <span class="muted">(${md(s.comment, true)})</span>` : '')).join(', ')}.</p>`;
-  if (!e.isProp) h += pinsHtml(e);
+  if (!e.isProp) h += domainHtml(e) + pinsHtml(e);
   h += '</div>';
   if (e.provenance && S.ledger) {
     const b = S.ledger.builds[e.provenance.last], when = b.date ? ` (${esc(b.date)})` : '';
@@ -546,7 +554,7 @@ async function renderSpecifications() {
   let h = pagerFor('#/specifications') + `<h1>Specifications</h1>` + scopeNotice() +
     `<p>A definition is taken on faith unless something says what it means. Three sources do: <b>the code</b> (theorems its authors marked with <code>@[specifies]</code>, examples and non-examples, and characterizations, whose shapes Lean checks, and the <code>example</code>s that use it), <b>reviewers</b> (theorems of the library they listed as its tests, each passing while it is there without <code>sorry</code>), and what is <b>wanted</b> (tests someone proposed and nobody has written yet, which do not count until they are).</p>`;
   const pinned = defs.filter(r => pinOf(r).pinned), without = defs.filter(r => !pinOf(r).pinned);
-  const counts = s => [s.code ? `${s.code} in the code` : '', s.reviewers ? `${s.reviewers} from reviewers` : '', s.wanted ? `${s.wanted} wanted` : ''].filter(Boolean).join(' · ');
+  const counts = s => [s.code ? `${s.code} in the code` : '', s.catalogue ? `${s.catalogue} from a catalogue` : '', s.reviewers ? `${s.reviewers} from reviewers` : '', s.wanted ? `${s.wanted} wanted` : ''].filter(Boolean).join(' · ');
   h += `<h2>Pinned down (${pinned.length})</h2>`;
   for (const r of pinned.sort((a, b) => a[R.NAME].localeCompare(b[R.NAME]))) {
     const s = pinOf(r);

@@ -217,6 +217,8 @@ def build(opt: Options) -> dict:
     states = (lambda name: "".join(STATE_LETTER[ev.decl_state(name, p)] for p in POLICIES)) if ev else (lambda name: "")
     # What pins each definition down: in the code, from reviewers, wanted (evidence-core's pins).
     pins = Pins(ds, ev)
+    # Where each definition is meant to apply (@[domain]), by its authors or by a catalogue.
+    domains = analysis.domains(ds)
 
     claim_by_decl = {c.decl: c for c in cl.claims if c.found}
     led = ledger_mod.load(opt.ledger)
@@ -270,6 +272,7 @@ def build(opt: Options) -> dict:
             "claim": claim_by_decl[d.name].as_json() if d.name in claim_by_decl else None,
             "specifies": ann["specifies"].get(d.name, []),
             "pins": pins.of(d.name) if not d.is_prop else [],
+            "domain": domains.get(d.name),
             "pulled": d.id in pulled,
             "directExternal": sorted(by_id[t].name for t in meaning.get(d.id, ()) if not by_id[t].is_project),
             "provenance": ({"last": hist[d.name][-1][0], "changes": len(hist[d.name]), "first": hist[d.name][0][0]}

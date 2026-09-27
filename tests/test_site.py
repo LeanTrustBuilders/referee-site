@@ -293,7 +293,7 @@ class PinsTests(unittest.TestCase):
             [test] = [p for p in entries[F + "triple"]["pins"] if p["kind"] == "test"]
             self.assertEqual((test["decl"], test["result"], test["mentions"], test["url"]),
                              (F + "triple_pos", "passes", True, "https://github.com/owner/lib/issues/4"))
-            self.assertEqual(site["pins"][F + "triple"], {"pinned": True, "characterized": False, "code": 2, "reviewers": 1, "wanted": 1})
+            self.assertEqual(site["pins"][F + "triple"], {"pinned": True, "characterized": False, "code": 2, "catalogue": 0, "reviewers": 1, "wanted": 1})
             self.assertEqual([(n, p["comment"]) for n, p in site["wanted"]], [(F + "triple", "triple is injective")])
             self.assertEqual((site["forms"]["challenge"], site["forms"]["test"]), ("evidence-challenge.yml", "evidence-test.yml"))
             # The claim page's cards say the same.
