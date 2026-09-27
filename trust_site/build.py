@@ -219,6 +219,8 @@ def build(opt: Options) -> dict:
     pins = Pins(ds, ev)
     # Where each definition is meant to apply (@[domain]), by its authors or by a catalogue.
     domains = analysis.domains(ds)
+    # What each definition is determined up to (@[up_to]).
+    up_to = analysis.up_to(ds)
 
     claim_by_decl = {c.decl: c for c in cl.claims if c.found}
     led = ledger_mod.load(opt.ledger)
@@ -273,6 +275,7 @@ def build(opt: Options) -> dict:
             "specifies": ann["specifies"].get(d.name, []),
             "pins": pins.of(d.name) if not d.is_prop else [],
             "domain": domains.get(d.name),
+            "upTo": up_to.get(d.name),
             "pulled": d.id in pulled,
             "directExternal": sorted(by_id[t].name for t in meaning.get(d.id, ()) if not by_id[t].is_project),
             "provenance": ({"last": hist[d.name][-1][0], "changes": len(hist[d.name]), "first": hist[d.name][0][0]}

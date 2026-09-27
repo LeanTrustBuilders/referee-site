@@ -354,10 +354,21 @@ function pinItem(p) {
 }
 // Where a definition is meant to apply, as its authors or a catalogue declared it (@[domain]):
 // outside it, the value is a junk value or a convention.
+// And what it is determined up to (@[up_to]), next to the characterizations that prove it.
 function domainHtml(e) {
-  const d = e.domain; if (!d) return '';
-  const who = d.source === 'catalogue' ? 'declared by a catalogue, from outside the library' : 'declared by its authors';
-  return `<h3>Where it is meant to apply</h3><pre class="pin-stmt">${esc(d.statement)}</pre>${d.note ? `<p>${md(d.note, true)}</p>` : ''}<p class="muted small">${who}, with <code>@[domain]</code>. Outside it, what the definition returns is a default value, not the intended one.</p>`;
+  const who = x => x.source === 'catalogue' ? 'declared by a catalogue, from outside the library' : 'declared by its authors';
+  let h = '';
+  const d = e.domain;
+  if (d) h += `<h3>Where it is meant to apply</h3><pre class="pin-stmt">${esc(d.statement)}</pre>${d.note ? `<p>${md(d.note, true)}</p>` : ''}<p class="muted small">${who(d)}, with <code>@[domain]</code>. Outside it, what the definition returns is a default value, not the intended one.</p>`;
+  const u = e.upTo;
+  if (u) {
+    const chars = (e.pins || []).filter(p => p.kind === 'characterization' && p.complete);
+    const proved = chars.length
+      ? `<p class="small">Characterizations prove it unique up to: ${chars.map(p => p.uniqueness.map(q => `<code>${esc(q.relation)}</code> (${declLink(q.decl)})`).join(', ')).join('; ')}.</p>`
+      : `<p class="small muted">No characterization proves it yet: the declaration is a claim.</p>`;
+    h += `<h3>What it is determined up to</h3><pre class="pin-stmt">${esc(u.statement)}</pre>${u.note ? `<p>${md(u.note, true)}</p>` : ''}${proved}<p class="muted small">${who(u)}, with <code>@[up_to]</code>. Its value is one representative: a statement that tells related values apart is about that representative, not about what the definition means.</p>`;
+  }
+  return h;
 }
 function pinsHtml(e) {
   const pins = e.pins || [];
