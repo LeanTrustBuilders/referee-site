@@ -195,7 +195,16 @@ function summary() {
   const missing = [['problem', 'with an open problem'], ['disputed', 'disputed'], ['uncounted', 'reviewed, but not counted under your policy'],
     ['stale', 'reviewed only in an earlier version'], ['unreviewed', 'not yet reviewed']]
     .filter(([k]) => c[k].length).map(([k, t]) => `${c[k].length} ${t}: ${c[k].map(nameLink).join(', ')}`);
-  return `<div class="cp-summary"><div class="meter" aria-label="${pct}% reviewed">${bar}</div><p>${lead}</p>${missing.length ? `<ul class="missing">${missing.map(m => `<li>${m}</li>`).join('')}</ul>` : ''}</div>`;
+  return `<div class="cp-summary"><div class="meter" aria-label="${pct}% reviewed">${bar}</div><p>${lead}</p>${missing.length ? `<ul class="missing">${missing.map(m => `<li>${m}</li>`).join('')}</ul>` : ''}${kernelNote()}</div>`;
+}
+// Whether what this page says the claim rests on is all it rests on: Lean's kernel check (trust-extract check).
+function kernelNote() {
+  const k = (E.kernel || {}).meaning;
+  if (!k) return `<p class="muted small">The list of what it rests on was not checked by Lean's kernel for this build.</p>`;
+  const failing = [...k.missing, ...k.error];
+  if (failing.length) return `<p class="warnline">⚠ Lean's kernel found the dependencies of ${failing.map(nameLink).join(', ')} incomplete: this claim may rest on more than this page lists.</p>`;
+  if (k.counts.unchecked || k.counts.skipped) return `<p class="muted small">Lean's kernel checked ${k.ok} of the ${k.declarations} declarations listed here; the others were not checked.</p>`;
+  return `<p class="muted small">✓ Lean's kernel checked each of these ${k.declarations} declarations with nothing but what this page lists: the claim rests on nothing else.</p>`;
 }
 function policyPanel() {
   return `<section class="cp-policy" id="policy"><h2>Whose reviews count</h2>

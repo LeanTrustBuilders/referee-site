@@ -30,6 +30,7 @@ from evidence_core import claims as claims_mod
 from evidence_core import ledger as ledger_mod
 from evidence_core import records as evrec
 from evidence_core.changes import compare
+from evidence_core.checks import kernel_notions, kernel_summary
 from evidence_core.source import Sources, split_statement
 from evidence_core.store import Store
 from evidence_core.views import views_on
@@ -166,6 +167,19 @@ def build(opt: Options) -> dict:
                 if t in scope_set:
                     users[t].append(s)
 
+    # Lean's kernel check of each closure (trust-extract check), along each notion the dataset was checked along.
+    kernel_rows = {n: ds.facet(f"check.kernel.{n}") for n in kernel_notions(ds)}
+
+    def kernel_of(name: str) -> dict | None:
+        if not kernel_rows:
+            return None
+        out = {}
+        for notion, rows in kernel_rows.items():
+            row = (rows.get(name) or [None])[0]
+            out[notion] = {"kernel": "unchecked"} if row is None else \
+                {k: (v[:20] if isinstance(v, list) else v) for k, v in row.items() if k != "decl"}
+        return out
+
     spec_of = analysis.specifications(ds)          # definition → the theorems about it
     chars = analysis.characterizations(ds)          # definition → its characterizations
 
@@ -214,6 +228,7 @@ def build(opt: Options) -> dict:
             "external": sorted([by_id[t].name, upstream_pkg.get(t, ""), by_id[t].kind] for t in ext),
             "users": sorted(users.get(d.id, [])),
             "sorry": so.uses, "ownSorry": so.own, "sorryVia": list(so.via) if so.uses and not so.own else [],
+            "kernel": kernel_of(d.name),
             "axioms": analysis.extra_axioms(ds, d.name),
             "change": changes.detail.get(d.name) if changes else None,
             "reviews": reviews.get(d.name, []),
@@ -327,6 +342,7 @@ def build(opt: Options) -> dict:
                                 "characterized": analysis.is_characterized(chars.get(d.name, []))}]
                       for d in scope if not d.is_prop and (spec_of.get(d.name) or chars.get(d.name))],
         "evidence": {"records": sum(len(v) for v in reviews.values())} if reviews else None,
+        "kernel": {n: kernel_summary(ds, n, [d.name for d in scope]).as_json() for n in kernel_rows},
         "ledger": {"builds": led["builds"]} if led["builds"] else None,
         "tipShards": tip_shards,
     }

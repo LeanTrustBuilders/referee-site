@@ -210,5 +210,39 @@ class ClaimPageTests(unittest.TestCase):
             self.assertEqual(states["0011"][F + "triple_pos"], "covered")
 
 
+class KernelCheckTests(unittest.TestCase):
+    """The kernel check's results (trust-extract check), on the site and on a claim's page."""
+
+    def test_the_site_and_the_claim_page_say_what_the_kernel_found(self):
+        import shutil
+        from evidence_core.store import Store, default_config
+        from trust_site.claim_page import ClaimOptions, build_claim
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            ds = tmp / "ds"
+            shutil.copytree(V / "fixture-b", ds)
+            meta = json.loads((ds / "meta.json").read_text())
+            meta["facets"].append({"name": "check.kernel.meaning", "file": "facets/check.kernel.meaning.jsonl",
+                                   "schema": "check.kernel/1", "count": 0})
+            (ds / "meta.json").write_text(json.dumps(meta))
+            rows = [{"decl": d.name, "kernel": "ok"} for d in B.decls if d.is_project and d.name != F + "triple"]
+            rows.append({"decl": F + "triple", "kernel": "missing", "missing": ["Fixture.helper"]})
+            (ds / "facets" / "check.kernel.meaning.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+            build(Options(dataset=ds, out=tmp / "site", source=V / "source-b"))
+            site = json.loads((tmp / "site" / "data" / "site.json").read_text())
+            self.assertEqual((site["kernel"]["meaning"]["missing"], site["kernel"]["meaning"]["counts"]["missing"]), ([F + "triple"], 1))
+            entries = {e["name"]: e for p in (tmp / "site" / "data" / "m").glob("*.json") for e in json.loads(p.read_text())}
+            self.assertEqual(entries[F + "double"]["kernel"], {"meaning": {"kernel": "ok"}})
+            self.assertEqual(entries[F + "triple"]["kernel"]["meaning"]["missing"], ["Fixture.helper"])
+            Store.init(tmp / "evidence", default_config("owner/lib", "Fixture"))
+            build_claim(ClaimOptions(dataset=ds, out=tmp / "page", store=tmp / "evidence", source=V / "source-b"))
+            k = json.loads((tmp / "page" / "data" / "evidence.json").read_text())["kernel"]["meaning"]
+            self.assertIn(F + "triple", k["missing"])                 # triple_pos rests on triple
+            self.assertEqual(k["declarations"], k["ok"] + 1)
+            # A dataset that was not checked says nothing.
+            build(Options(dataset=V / "fixture-b", out=tmp / "site2"))
+            self.assertEqual(json.loads((tmp / "site2" / "data" / "site.json").read_text())["kernel"], {})
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -190,11 +190,28 @@ function scopeNotice() {
   return `<div class="notice"><b>${plural(sc.size, 'declaration')}</b>: the ${plural(seeds, sc.mode === 'only' ? 'declaration' : 'result')} ${sc.mode === 'only' ? 'this site is built for' : 'this project puts forward'}, the ${(sc.size - seeds - sc.pulled).toLocaleString('en')} their <b>statements</b> rest on${pulled}, out of ${sc.library.toLocaleString('en')} the library exposes. What the proofs call is not here, and every count on this site is over these ${sc.size.toLocaleString('en')}.</div>`;
 }
 
+// Lean's kernel check of the dependencies this site shows (trust-extract check, read by evidence-core).
+function kernelSentence() {
+  const k = (S.kernel || {}).meaning;
+  if (!k) return `<span class="muted">What each declaration rests on, as this site shows it, was not checked by Lean's kernel for this build.</span>`;
+  const bad = k.declarations - k.ok;
+  return bad ? `Lean's kernel found the dependencies this site shows incomplete for ${plural(bad, 'declaration')} (see <a href="#/sorries">Sorries and assumptions</a>).`
+    : `Lean's kernel checked that what this site shows each of them rests on is all it rests on${(S.kernel.term && S.kernel.term.declarations === S.kernel.term.ok) ? ', proofs included' : ''}.`;
+}
+function kernelLine(e) {
+  if (!e.kernel) return `<p class="muted" style="font-size:14px">Not checked by Lean's kernel: this build did not run the check of dependencies.</p>`;
+  const m = e.kernel.meaning, t = e.kernel.term;
+  if (!m || m.kernel === 'unchecked' || m.kernel === 'skipped') return `<p class="muted" style="font-size:14px">Not checked by Lean's kernel.</p>`;
+  if (m.kernel === 'missing') return `<p>✗ <b>Its dependencies are incomplete:</b> Lean's kernel needed ${m.missing.map(x => declLink(x)).join(', ')}, which what this page says it rests on lacks. The coverage counted over it may miss something.</p>`;
+  if (m.kernel === 'error') return `<p>? <b>Dependencies not confirmed:</b> Lean's kernel rejected it for another reason (${esc(m.error || 'unknown')}).</p>`;
+  const proof = t && t.kernel === 'ok' ? ' Its proof was checked the same way, against everything it uses.' : t && t.kernel === 'missing' ? ` Its proof, though, needs ${t.missing.map(x => declLink(x)).join(', ')} beyond what its proof dependencies list.` : '';
+  return `<p>✓ <b>Its dependencies are complete:</b> Lean's kernel accepted it with nothing but what this page says it rests on.${proof}</p>`;
+}
 function renderHome() {
   const c = S.counts;
   let h = pagerFor('#/') + `<h1 style="text-align:center">${esc(S.title)}</h1>` + scopeNotice();
   const proved = c.sorry === 0 ? `All of them are proved with no <code>sorry</code> anywhere.` : `${plural(c.sorry, 'of them depends', 'of them depend')} on a <code>sorry</code> (see <a href="#/sorries">Sorries</a>).`;
-  h += `<p class="lead"><code>${esc(S.root)}</code> has ${plural(c.decls, 'declaration')}: <a href="#/theorems">${plural(c.theorems, 'theorem')}</a>, ${plural(c.lemmas, 'lemma')} and ${plural(c.definitions, 'definition')}. ${proved}</p>`;
+  h += `<p class="lead"><code>${esc(S.root)}</code> has ${plural(c.decls, 'declaration')}: <a href="#/theorems">${plural(c.theorems, 'theorem')}</a>, ${plural(c.lemmas, 'lemma')} and ${plural(c.definitions, 'definition')}. ${proved} ${kernelSentence()}</p>`;
   const cl = S.claims;
   if (cl.claims.length) {
     const src = cl.sources.includes('formalization.yaml') ? 'in a <code>formalization.yaml</code>' : cl.sources.includes('comparator') ? 'in its Comparator setup' : cl.sources.includes('annotation') ? 'with <code>@[claim]</code>' : 'on the command line';
@@ -268,6 +285,7 @@ async function renderDecl(name) {
   if (e.outside?.length) h += `<p class="muted">Outside this scoped site: ${e.outside.map(x => `<code>${esc(x)}</code>`).join(', ')}.</p>`;
   if (e.external.length) h += `<details><summary class="muted">The external constants its statement rests on</summary><ul>${e.external.map(([n, p, k]) => `<li><code data-c="${esc(n)}">${esc(n)}</code> <span class="muted">${esc(p)} · ${esc(k)}</span></li>`).join('')}</ul></details>`;
   h += e.sorry ? `<p>✗ <b>Not proved:</b> ${e.ownSorry ? 'it contains a <code>sorry</code> itself' : `it rests on a <code>sorry</code>, through ${e.sorryVia.map(x => declLink(x)).join(', ')}`}.</p>` : `<p>✓ <b>Proved:</b> no <code>sorry</code> anywhere in its closure${e.axioms.length ? `, but it rests on the axioms ${e.axioms.map(a => `<code>${esc(a)}</code>`).join(', ')}` : ''}.</p>`;
+  h += kernelLine(e);
   h += `<p class="muted" style="font-size:14px">This is this tool's own reading of one build's recorded axioms, and it is not robust against an author who wants it to pass. Checking meant to be relied on should go through <a href="https://github.com/leanprover/comparator">Comparator</a>, which replays the proof through the kernel against an explicit list of permitted axioms.</p>`;
   if (e.users.length) h += `<details><summary class="muted">Used by ${plural(e.users.length, 'declaration')} of the ${scoped() ? 'site' : 'library'}</summary><ul>${e.users.map(i => `<li>${declLink(D[idIndex.get(i)][R.NAME])}</li>`).join('')}</ul></details>`;
   h += pager(prev, next);
@@ -403,6 +421,14 @@ function renderSorries() {
     if (inherited.length) h += `<details><summary>The ${inherited.length} that inherit one</summary><ul>${inherited.map(r => `<li>${declLink(r[R.NAME])}</li>`).join('')}</ul></details>`;
   }
   h += c.extraAxioms.length ? `<p>Axioms beyond the ordinary three: ${c.extraAxioms.map(a => `<code>${esc(a)}</code>`).join(', ')}.</p>` : `<p>No declaration rests on an axiom beyond the ordinary three.</p>`;
+  h += `<hr><h2>Dependencies checked by Lean's kernel</h2><p>Everything this site says about what a declaration rests on (its dependency graph, coverage, what changed underneath) comes from the dependencies the dataset records. Lean's kernel checked each declaration again with nothing but those, proofs erased: if it accepts, nothing was left out.</p>`;
+  const kn = S.kernel || {};
+  if (!kn.meaning) h += `<p class="muted">This build did not run the check.</p>`;
+  for (const [notion, k] of Object.entries(kn)) {
+    const bad = ['missing', 'error', 'skipped', 'unchecked'].filter(x => k.counts[x]);
+    h += `<p><b>${notion === 'meaning' ? 'What each statement and definition rests on' : 'What each proof uses'}</b>: ${k.ok.toLocaleString('en')} of ${plural(k.declarations, 'declaration')} pass.${bad.length ? '' : ' Nothing was left out.'}</p>` +
+      bad.map(x => `<details><summary>${plural(k.counts[x], 'declaration')} ${{missing: 'whose dependencies lack something the kernel needed', error: 'the kernel rejected for another reason', skipped: 'not checked', unchecked: 'not in the check (added since?)'}[x]}</summary><ul>${k[x].map(n => `<li>${declLink(n)}</li>`).join('')}</ul></details>`).join('');
+  }
   const up = S.packages.filter(p => !p.project && !p.toolchain), un = up.filter(p => !p.trusted);
   h += `<hr><h2>What it rests on</h2><p>Nothing above this point leaves the project, and most of what lies beyond it needs no trust: upstream <i>proofs</i> were rechecked by the kernel, and anything left unproved in one arrives here as a <code>sorry</code> or an extra axiom — both already counted above, upstream included.</p><p>What does not come for free is an upstream <i>definition</i> that a statement is about. A theorem mentioning a definition from another package means what it means only if that definition is the intended one, and no proof settles that. So what follows counts statements, not proofs.</p><p>The graph is the dependency order: the toolchain at the top, this project at the bottom, an edge from each package to the one that requires it.</p>
     <p>${un.length ? `${plural(un.length, 'upstream package is', 'upstream packages are')} unaudited: ${un.map(p => `<b>${esc(p.name)}</b> (${plural(p.statementConstants, 'constant')} the statements mention)`).join(', ')}.` : `No upstream package is unaudited: ${S.trust.length ? `every one of the ${up.length} is trusted through <code>--trust ${S.trustGiven.map(esc).join(' --trust ')}</code>, which trusts ${S.trustGiven.length === 1 ? 'that package' : 'those packages'} and everything ${S.trustGiven.length === 1 ? 'it depends' : 'they depend'} on` : 'there is none'}.`}</p><div class="graph" id="pg"></div>`;

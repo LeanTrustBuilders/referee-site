@@ -26,6 +26,7 @@ from pathlib import Path
 from evidence_core import Dataset, Evidence
 from evidence_core import claims as claims_mod
 from evidence_core import records as recmod
+from evidence_core.checks import kernel_notions, kernel_summary
 from evidence_core.coverage import all_policies, policy_key, POLICY_SWITCHES, UNCOUNTED
 from evidence_core.store import Store
 from evidence_core.views import record_view
@@ -120,6 +121,8 @@ def build_claim(opt: ClaimOptions) -> dict:
         "packages": sorted({d.package for d in closure if not d.is_project}),
         "records": rows, "orphans": len(ev.orphans),
         "policy": {"switches": list(POLICY_SWITCHES), "states": states, "why": why},
+        # Whether Lean's kernel accepted each declaration of the claim's closure with only its closure.
+        "kernel": {n: kernel_summary(ds, n, order).as_json() for n in kernel_notions(ds)},
         "store": {"records": len(records), "maintainers": config.get("maintainers", [])} if store else None,
         "agentCommand": f"evidence-store submit --repo {repo} --decl NAME --verdict accept "
                         f"--rationale \"…\" --agent \"TOOL, MODEL\"" if store and repo else "",
