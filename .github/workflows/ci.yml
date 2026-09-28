@@ -23,3 +23,23 @@ jobs:
           trust-site build --dataset tests/vectors/fixture-b --source tests/vectors/source-b \
             --baseline tests/vectors/fixture-a --out "$RUNNER_TEMP/site"
           for f in core app claim; do node --check "$RUNNER_TEMP/site/assets/$f.js"; done
+
+  # The action a library's CI uses, on the fixture's dataset (its extraction and ledger need a Lean
+  # library and a repository to write to: they are the extractor's action, and are exercised where
+  # the action is used).
+  action:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: site
+        uses: ./build
+        with:
+          root: Fixture
+          directory: tests/vectors/source-b
+          dataset: tests/vectors/fixture-b
+          ledger: ''
+          trust: lean4
+          args: --title Fixture
+      - run: |
+          test -f "${{ steps.site.outputs.site }}/data/site.json"
+          test -f "${{ steps.site.outputs.site }}/data/graph-full.json"

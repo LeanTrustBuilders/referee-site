@@ -30,6 +30,26 @@ result is a static directory to serve as it is.
 | chapters, modules | the library's structure, module docstrings, module dependency graphs |
 | declarations | the statement taken apart (types, variables with their instances, hypotheses, conclusion; result and body; fields; constructors), code and proof, claims and specifications, when its meaning last changed, published reviews and your own audit, its dependency graph, what it rests on outside the project, `sorry` and axioms |
 
+## In CI
+
+One step builds the site of a library that CI has built:
+
+```yaml
+- uses: LeanTrustBuilders/referee-site/build@main
+  with:
+    root: MyLibrary
+    trust: mathlib            # optional: upstream packages the publisher vouches for
+    out: home_page/referee    # optional: where the site goes, relative to the workspace
+```
+
+It extracts the dataset with the extractor's action (`extract-args`, `check` and `welldefined` pass
+through) and publishes it as the release `dataset-<commit12>`; records the build in the provenance
+ledger, kept on the branch `trust-ledger` (`ledger:` to change it, empty for none); and builds the
+site against the previous build the ledger recorded, with `args` for anything else (`--claims-only`,
+`--full-graph`, `--title`). The workflow needs `contents: write` and a checkout with its history
+(`fetch-depth: 0`). Its outputs are `site` and `dataset`. With `dataset:`, it builds from a dataset
+already extracted.
+
 ## Claims only
 
 `--claims-only` builds the site for the claims and what their **statements** rest on — a few
