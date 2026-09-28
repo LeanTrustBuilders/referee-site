@@ -295,8 +295,7 @@ def build(opt: Options) -> dict:
                      doc_summary(doc), kw or "",
                      sum(1 for r in reviews.get(d.name, []) if r["verdict"] == "accept" and r["inForce"] and r["applies"]),
                      hist[d.name][-1][0] if d.name in hist else -1, hist[d.name][0][0] if d.name in hist else -1,
-                     # ltb-dataset/1: the meaning hash of ltb-dataset/0, which audits made before hold.
-                     d.legacy_meaning or "", states(d.name)])
+                     states(d.name)])
         srow = source_rows.get(d.name, [None])[0]
         text = src.text(srow) if srow else None
         code, proof = split_statement(text) if text else ("", "")

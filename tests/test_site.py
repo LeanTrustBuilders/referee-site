@@ -3,7 +3,7 @@
 Version B of the fixture changes the body of `double`, the statement of `triple_one`, only the proof
 of `triple_two`, and renames `triple_three`. `triple_pos` carries `@[claim]`; `double_triple`
 specifies `double` and `triple`; `IsDouble` characterizes `double`. The datasets are real output of
-trust-extract 0.6 (`test/run.sh KEEP_DIR` in LeanTrustBuilders/extractor), fixture-b-closure the
+trust-extract 0.9 (`test/run.sh KEEP_DIR` in LeanTrustBuilders/extractor), fixture-b-closure the
 same commit extracted with `--upstream-closure term`, and source-a/source-b the fixture's sources.
 
 What the pages show is computed by evidence-core (claims, changes, the ledger, source text, the
@@ -193,7 +193,7 @@ class TrustIndexTests(unittest.TestCase):
             self.assertEqual(meta["declCount"], len(decls))
             self.assertEqual(meta["source"]["upstreamClosure"]["follow"], "term")
             # trust's certificate hash is the dataset's proof-relevant (content) hash.
-            self.assertEqual((meta["hasHashes"], meta["hasher"]), (True, "semantic-v1"))
+            self.assertEqual((meta["hasHashes"], meta["hasher"]), (True, "ltb-content/1"))
             self.assertEqual(decls[ids[F + "double"]]["hash"], B.by_name[F + "double"].content)
             pairs = lambda f: [tuple(p) for p in struct.iter_unpack("<ii", (out / f).read_bytes())]
             stmt, body = pairs("stmt-edges.bin"), pairs("body-edges.bin")
@@ -406,8 +406,8 @@ class CommunityTests(unittest.TestCase):
             site = json.loads((tmp / "site" / "data" / "site.json").read_text())
             rows = {r[1]: r for r in json.loads((tmp / "site" / "data" / "decls.json").read_text())}
             # Reviewed only by an AI agent: uncounted unless the policy counts agents (the first switch).
-            self.assertEqual(rows[F + "triple"][15], "u" * 8 + "c" * 8)
-            self.assertEqual(rows[F + "double"][15], "n" * 16)
+            self.assertEqual(rows[F + "triple"][14], "u" * 8 + "c" * 8)
+            self.assertEqual(rows[F + "double"][14], "n" * 16)
             entries = {e["name"]: e for p in (tmp / "site" / "data" / "m").glob("*.json") for e in json.loads(p.read_text())}
             kinds = sorted(r["kind"] for r in entries[F + "triple"]["records"])
             self.assertEqual(kinds, ["comment", "review"])

@@ -195,9 +195,9 @@ trusted, every reviewed declaration is listed with its S3 status, and theorems t
 characterize a definition (`@[specifies]`, `@[characterization]`) characterize it. `--trust`
 packages count as trusted wholesale, so "up to trusted" stops at them.
 
-trust's certificates are keyed by semantic_hash's proof-relevant hash (its hasher `semantic-v1`),
-which is the dataset's `content` hash when both use the same semantic_hash revision; the index
-then carries it, so that a certificate issued with trust matches the declaration here.
+Each declaration carries the dataset's content hash, under its hasher's name (`ltb-content/1`, the
+meaning hash's walk with proofs kept). trust-web keys certificates by that pair, so certificates
+issued with trust's own hasher (`semantic-v1`) do not match these declarations.
 
 ## Provenance
 

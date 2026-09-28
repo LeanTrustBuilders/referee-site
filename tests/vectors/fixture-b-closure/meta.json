@@ -4,9 +4,9 @@
   "display": "declared"
  },
  "toolchain": "leanprover/lean4:v4.35.0-rc2",
- "spec": "ltb-dataset/1",
+ "spec": "ltb-dataset/2",
  "producer": {
-  "version": "0.7.0",
+  "version": "0.9.0",
   "name": "trust-extract"
  },
  "packages": [
@@ -23,7 +23,7 @@
     "lean4"
    ],
    "name": "TrustAnnotations",
-   "modules": 4
+   "modules": 6
   },
   {
    "requires": [],
@@ -52,17 +52,7 @@
   "name": "ltb-meaning/1",
   "meaning": "ltb-meaning/1",
   "local": "ltb-local/2",
-  "legacy": {
-   "revision": "0496f6d7b650cb03c9ffc61089ffd400dfd98564",
-   "name": "semantic_hash",
-   "meaning": "proof-irrelevant",
-   "local": "ltb-local-v1"
-  },
-  "content": {
-   "variant": "proof-relevant",
-   "revision": "0496f6d7b650cb03c9ffc61089ffd400dfd98564",
-   "name": "semantic_hash"
-  }
+  "content": "ltb-content/1"
  },
  "facets": [
   {
@@ -98,6 +88,13 @@
    "name": "annotation.claim",
    "file": "facets/annotation.claim.jsonl",
    "description": "`@[claim]` annotations recorded in the TrustAnnotations extension: for each declaration, the payload of each application, in order",
+   "count": 1
+  },
+  {
+   "schema": "annotation/2",
+   "name": "annotation.domain",
+   "file": "facets/annotation.domain.jsonl",
+   "description": "`@[domain]` annotations recorded in the TrustAnnotations extension: for each declaration, the payload of each application, in order",
    "count": 1
   },
   {

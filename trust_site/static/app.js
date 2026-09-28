@@ -48,17 +48,9 @@ function loadAudit() {
   for (const a of Object.values(audit.decls)) if (OLD_VERDICT[a.verdict]) a.verdict = OLD_VERDICT[a.verdict];   // before reviews had verdicts of S3's
 }
 function saveAudit() { try { localStorage.setItem(AUDIT_KEY(), JSON.stringify(audit)); } catch (e) { } }
-/* A verdict made before the site's datasets moved to ltb-dataset/1 holds the old meaning hash, which
-   the rows still carry: the verdict is moved to the new hash, as the old one would have said. */
-function upgradeVerdict(a, row) {
-  if (a && row && row[R.LEGACY] && a.meaning === row[R.LEGACY] && a.meaning !== row[R.MEANING]) {
-    a.meaning = row[R.MEANING]; saveAudit();
-  }
-}
 function verdictOf(name) {
   const a = audit.decls[name]; const row = byName.get(name);
   if (!a || !a.verdict) return {verdict: null, stale: false, ...(a || {})};
-  upgradeVerdict(a, row);
   return {...a, stale: !!row && a.meaning !== row[R.MEANING]};
 }
 // Changes some fields of my review of a declaration: verdict, category, reference, checked, caveats,
