@@ -6,7 +6,7 @@
  "toolchain": "leanprover/lean4:v4.35.0-rc2",
  "spec": "ltb-dataset/2",
  "producer": {
-  "version": "0.11.0",
+  "version": "0.12.0",
   "name": "trust-extract"
  },
  "packages": [
@@ -49,7 +49,7 @@
  },
  "hasher": {
   "meaning": "ltb-meaning/1",
-  "local": "ltb-local/2",
+  "local": "ltb-local/3",
   "content": "ltb-content/1"
  },
  "facets": [
@@ -58,7 +58,7 @@
    "name": "docstring",
    "file": "facets/docstring.jsonl",
    "description": "the declaration's docstring, verbatim (project nodes, and upstream nodes unless the extractor ran with --no-upstream-docs)",
-   "count": 104
+   "count": 124
   },
   {
    "schema": "source/1",
@@ -121,7 +121,7 @@
    "name": "signature",
    "file": "facets/signature.jsonl",
    "description": "every node's signature as Lean prints it (`name (x : \u03b1) \u2026 : \u03b2`), for hovers; with `refs`, as in the statement facet",
-   "count": 138
+   "count": 201
   },
   {
    "schema": "statement/1",
@@ -151,7 +151,7 @@
    "format": "i32le-pairs",
    "file": "edges/term.bin",
    "description": "the type and the whole value, proofs included, restricted to targets that are nodes",
-   "count": 203
+   "count": 448
   },
   {
    "name": "source",
@@ -183,8 +183,8 @@
   }
  ],
  "counts": {
-  "upstream": 117,
+  "upstream": 180,
   "project": 21,
-  "nodes": 138
+  "nodes": 201
  }
 }
