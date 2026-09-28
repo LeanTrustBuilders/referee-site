@@ -32,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: site
-        uses: ./build
+        uses: ./
         with:
           root: Fixture
           directory: tests/vectors/source-b

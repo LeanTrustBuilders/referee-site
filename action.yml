@@ -1,0 +1,157 @@
+name: Referee site
+description: >-
+  Build the Referee-style site of a built Lean library with the LeanTrustBuilders suite, in one step:
+  extract its dataset with the newest trust-extract release for its toolchain and publish it as the
+  release dataset-<commit12>; record the build in the provenance ledger, kept on a branch of its own;
+  and build the site with trust-site, against the previous build the ledger recorded.
+
+# The workflow needs `contents: write` (the dataset's release, and the ledger's branch), and a
+# checkout with its history (`fetch-depth: 0`): the ledger dates what changed with git.
+inputs:
+  root:
+    description: The library's root module prefix, e.g. AlphaRAR.
+    required: true
+  directory:
+    description: The library's checkout, built, with its history.
+    default: .
+  out:
+    description: Where to write the site, relative to the workspace (default $RUNNER_TEMP/referee-site).
+    default: ''
+  trust:
+    description: >-
+      Upstream packages whose content the site's publisher vouches for, space-separated (`mathlib`
+      vouches for Mathlib and everything under it). An editorial claim: without it, every upstream
+      package counts as unaudited.
+    default: ''
+  args:
+    description: More arguments to `trust-site build` (--claims-only, --full-graph, --title, --evidence, …).
+    default: ''
+  extract-args:
+    description: More arguments to `trust-extract extract` (--upstream-closure term, --parts, …).
+    default: ''
+  check:
+    description: Have Lean's kernel check the dataset's closures along these notions (`meaning`, or `meaning term`).
+    default: ''
+  welldefined:
+    description: Add the well-definedness facet (`trust-extract welldefined`).
+    default: 'false'
+  welldefined-args:
+    description: More arguments to `trust-extract welldefined`.
+    default: '--jobs 4'
+  dataset:
+    description: A dataset already extracted, relative to the workspace, to build the site from instead of extracting one.
+    default: ''
+  publish:
+    description: >-
+      Publish the dataset as the release dataset-<commit12>. Later builds take the previous one as
+      their baseline, for what changed.
+    default: 'true'
+  ledger:
+    description: >-
+      The branch the provenance ledger is kept on, so that recording a build never touches the main
+      branch. Empty for none: then the site has no provenance and no baseline.
+    default: trust-ledger
+  token:
+    description: A token that can read the extractor's releases, and write this repository's releases and ledger branch.
+    default: ${{ github.token }}
+outputs:
+  site:
+    description: The site's directory.
+    value: ${{ steps.build.outputs.site }}
+  dataset:
+    description: The dataset's directory.
+    value: ${{ steps.build.outputs.dataset }}
+runs:
+  using: composite
+  steps:
+    - id: name
+      shell: bash
+      working-directory: ${{ inputs.directory }}
+      run: |
+        echo "tag=dataset-$(git rev-parse HEAD | cut -c1-12)" >> "$GITHUB_OUTPUT"
+        echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        echo "date=$(git log -1 --format=%cs)" >> "$GITHUB_OUTPUT"
+        # The build's label in the ledger: the newest tag, dataset releases excepted, or the commit.
+        echo "label=$(git describe --tags --always --exclude 'dataset-*')" >> "$GITHUB_OUTPUT"
+
+    - id: extract
+      if: inputs.dataset == ''
+      uses: LeanTrustBuilders/extractor/extract@main
+      with:
+        root: ${{ inputs.root }}
+        repo: ${{ github.repository }}
+        directory: ${{ inputs.directory }}
+        args: ${{ inputs.extract-args }}
+        check: ${{ inputs.check }}
+        welldefined: ${{ inputs.welldefined }}
+        welldefined-args: ${{ inputs.welldefined-args }}
+        publish: ${{ inputs.publish == 'true' && steps.name.outputs.tag || '' }}
+        title: ${{ inputs.root }} ${{ steps.name.outputs.commit }}
+        token: ${{ inputs.token }}
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: trust-site, with evidence-core and evidence-store
+      shell: bash
+      # This action's own revision of referee-site, so that the action and the tool agree.
+      run: pip install -q "$GITHUB_ACTION_PATH"
+
+    - id: ledger
+      if: inputs.ledger != ''
+      shell: bash
+      working-directory: ${{ inputs.directory }}
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        DATASET: ${{ inputs.dataset || steps.extract.outputs.dataset }}
+        BRANCH: ${{ inputs.ledger }}
+        COMMIT: ${{ steps.name.outputs.commit }}
+        DATE: ${{ steps.name.outputs.date }}
+        LABEL: ${{ steps.name.outputs.label }}
+        ROOT: ${{ inputs.root }}
+      run: |
+        set -euo pipefail
+        case "$DATASET" in /*) ;; *) DATASET="$GITHUB_WORKSPACE/$DATASET" ;; esac
+        L="$RUNNER_TEMP/trust-ledger"
+        if git fetch -q origin "$BRANCH"; then
+          git worktree add -q -B "$BRANCH" "$L" FETCH_HEAD
+        else
+          git worktree add -q --orphan -b "$BRANCH" "$L"
+        fi
+        args="--ledger $L/ledger.json"
+        # The baseline: the previous build the ledger recorded, whose dataset is a release here.
+        prev=$(evidence-core ledger --ledger "$L/ledger.json" --previous "$COMMIT")
+        if [ -n "$prev" ] && evidence-store dataset --repo "$GITHUB_REPOSITORY" --tag 'dataset-{commit12}' \
+            --commit "$prev" --out "$RUNNER_TEMP/trust-baseline" > /dev/null; then
+          args="$args --baseline $RUNNER_TEMP/trust-baseline"
+        fi
+        evidence-core ledger --ledger "$L/ledger.json" --dataset "$DATASET" --date "$DATE" --label "$LABEL"
+        cd "$L"
+        git add ledger.json
+        if ! git diff --cached --quiet; then
+          git -c user.name="github-actions[bot]" \
+            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "$ROOT ${COMMIT:0:7}: record the build"
+          git push -q origin "$BRANCH"
+        fi
+        echo "args=$args" >> "$GITHUB_OUTPUT"
+
+    - id: build
+      shell: bash
+      working-directory: ${{ inputs.directory }}
+      env:
+        DATASET: ${{ inputs.dataset || steps.extract.outputs.dataset }}
+        OUT: ${{ inputs.out }}
+        TRUST: ${{ inputs.trust }}
+        ARGS: ${{ inputs.args }}
+        LEDGER_ARGS: ${{ steps.ledger.outputs.args }}
+      run: |
+        set -euo pipefail
+        out=${OUT:-$RUNNER_TEMP/referee-site}
+        case "$out" in /*) ;; *) out="$GITHUB_WORKSPACE/$out" ;; esac
+        case "$DATASET" in /*) ;; *) DATASET="$GITHUB_WORKSPACE/$DATASET" ;; esac
+        trust=""
+        for p in $TRUST; do trust="$trust --trust $p"; done
+        trust-site build --dataset "$DATASET" --source . $LEDGER_ARGS $trust $ARGS --out "$out"
+        { echo "site=$out"; echo "dataset=$DATASET"; } >> "$GITHUB_OUTPUT"

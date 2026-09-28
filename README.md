@@ -35,7 +35,7 @@ result is a static directory to serve as it is.
 One step builds the site of a library that CI has built:
 
 ```yaml
-- uses: LeanTrustBuilders/referee-site/build@main
+- uses: LeanTrustBuilders/referee-site@main
   with:
     root: MyLibrary
     trust: mathlib            # optional: upstream packages the publisher vouches for
