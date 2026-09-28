@@ -59,6 +59,21 @@ reader judging a claim needs, and no dependency edge points at them). `--only DE
 a claim set of one. Every count on a scoped site is over the scope, and the home page says so first.
 On alpha-rar, 6 claims give a site of 53 declarations out of 815, as Referee's does.
 
+## How graphs are drawn
+
+Dependency graphs (of a declaration, of the modules of a chapter, of the upstream packages) are laid
+out by the layered algorithm of [ELK](https://eclipse.dev/elk/), the Eclipse Layout Kernel, top-down:
+what a node rests on is above it, each node sits near what it connects to, and an edge that spans
+several levels runs between the nodes on them, so that none is drawn through another node. Edges
+implied by a longer path are left out. The upstream constants a statement names form a band on top,
+whose edges join into one line to what names them. ELK (elkjs 0.9.3, EPL-2.0, in
+`trust_site/static/vendor/`, 1.6 MB) is loaded the first time a page draws a graph; without it, the
+page falls back to rows by dependency depth.
+
+Measured on graphs of 27 to 283 declarations from the pilot sites, against the rows by depth drawn
+before: no edge through another node at any size (there were 9 of 37 at 27 nodes, 120 of 322 at
+197), and 4 to 10 times fewer crossing edges.
+
 ## The full graph
 
 A declaration's dependency graph shows what its meaning rests on: its statement, and a definition's

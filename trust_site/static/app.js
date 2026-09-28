@@ -672,7 +672,7 @@ async function renderDecl(name) {
         card: nodeCard, control: n => n.id >= 0 ? cardControl(n.id) : '',
         extra: !subs.size && !full && audited ? {label: showAudited ? 'Hide audited upstream' : `Show audited upstream (${audited})`, pressed: showAudited,
           onClick: () => { showAudited = !showAudited; try { localStorage.setItem('trust-site:graph-upstream', showAudited ? '1' : '0'); } catch (err) { } draw(); }} : null,
-        caption: `${plural(ids.length, 'declaration')} across the dependency rows; the top row depends on nothing. ${full ? 'A theorem points to what its proof uses too; faded, what only proofs reach. ' : subs.size ? 'A definition taken from its characterization points to it. ' : ''}Click a node to read it here.`});
+        caption: `${plural(ids.length, 'declaration')}, each below what it rests on. ${full ? 'A theorem points to what its proof uses too; faded, what only proofs reach. ' : subs.size ? 'A definition taken from its characterization points to it. ' : ''}Click a node to read it here.`});
     };
     draw();
   }];
@@ -832,7 +832,7 @@ function renderSorries() {
     const ids = S.packages.map((p, i) => i), idx = new Map(S.packages.map((p, i) => [p.name, i]));
     const nodes = S.packages.map((p, i) => ({id: i, label: p.toolchain ? 'Lean' : p.name, title: p.toolchain ? 'Lean (the toolchain)' : p.name, kind: p.project ? 'This project' : (p.toolchain ? 'Toolchain, always trusted' : (p.trusted ? 'Audited package' : 'Unaudited package')), summary: `${p.modules} modules imported${p.project ? '' : `; the statements name ${plural(p.statementConstants, 'constant')} of it`}.`, root: !!p.project, untrusted: !p.trusted && !p.project}));
     const edges = []; S.packages.forEach((p, i) => p.requires.forEach(r => idx.has(r) && edges.push([i, idx.get(r)])));
-    graph($('#pg'), {nodes, edges, unit: 'package', caption: `${plural(nodes.length, 'package')} across the dependency rows; the top row depends on nothing. Click a node to read it here.`});
+    graph($('#pg'), {nodes, edges, unit: 'package', caption: `${plural(nodes.length, 'package')}, each below what it rests on. Click a node to read it here.`});
   }];
 }
 function renderChanges() {
