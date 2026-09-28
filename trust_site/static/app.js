@@ -388,6 +388,7 @@ const WD_STATUS = {
 function wdPlace(o) {
   if (o.place === 'hypothesis') return o.name ? `in the hypothesis <code>${esc(o.name)}</code>` : `in hypothesis ${o.index}`;
   if (o.place === 'binder') return `in the type of <code>${esc(o.name)}</code>`;
+  if (o.place === 'body') return o.index ? `in case ${o.index} of the body` : 'in the body';
   return 'in the conclusion';
 }
 function wellDefinedHtml(e) {
@@ -396,10 +397,13 @@ function wellDefinedHtml(e) {
   const order = ['open', 'refuted', 'unapplied', 'irrelevant', 'discharged'];
   const obs = [...w.obligations].sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status));
   const meta = S.wellDefined?.meta;
-  let h = `<h3>The domains of the definitions it uses</h3>`;
+  // A definition's body, under its own declared domain; a statement, under its hypotheses.
+  const body = !e.isProp;
+  let h = body ? `<h3>Its body, under its domain</h3>` : `<h3>The domains of the definitions it uses</h3>`;
   if (w.error) return h + `<p class="muted">The analysis failed on this statement: <code>${esc(w.error)}</code></p>`;
-  if (e.claim && w.left.length) h += `<div class="notice warn">This claim does not show ${w.left.map(g => `<code>${esc(g)}</code>`).join(', ')}: where it uses ${w.left.length === 1 ? 'a definition' : 'definitions'} outside ${w.left.length === 1 ? 'that domain' : 'those domains'}, it may hold only by a default value.</div>`;
-  else if (!e.claim && w.left.length) h += `<p class="muted small">In a library lemma, a use outside a domain is often deliberate: the lemma then also covers the default value, and needs one hypothesis fewer. It matters in the results a library puts forward.</p>`;
+  if (body && w.left.length) h += `<div class="notice warn">Its body is not shown to stay inside ${w.left.map(g => `<code>${esc(g)}</code>`).join(', ')}, where its own domain holds. Where it leaves ${w.left.length === 1 ? 'that domain' : 'those domains'}, the definition relies on a default value inside its own domain.</div>`;
+  else if (e.claim && w.left.length) h += `<div class="notice warn">This claim does not show ${w.left.map(g => `<code>${esc(g)}</code>`).join(', ')}: where it uses ${w.left.length === 1 ? 'a definition' : 'definitions'} outside ${w.left.length === 1 ? 'that domain' : 'those domains'}, it may hold only by a default value.</div>`;
+  else if (!body && !e.claim && w.left.length) h += `<p class="muted small">In a library lemma, a use outside a domain is often deliberate: the lemma then also covers the default value, and needs one hypothesis fewer. It matters in the results a library puts forward.</p>`;
   h += `<ul class="wd">${obs.map(o => {
     const [word, why] = WD_STATUS[o.status] || [o.status, ''];
     const how = o.hypothesis ? `, from <code>${esc(o.hypothesis)}</code>` : o.by && o.by !== 'assumption' ? `, by <code>${esc(o.by)}</code>` : '';
@@ -407,7 +411,10 @@ function wellDefinedHtml(e) {
     const needs = o.goal ? ` needs <code>${esc(o.goal)}</code>${every}` : '';
     return `<li class="wd-${esc(o.status)}"><b title="${esc(why)}">${word}</b>${how}: <code>${esc(o.term)}</code>${needs}, ${wdPlace(o)} <span class="muted small">(${declLink(o.op, o.op.split('.').pop())}, domain declared by ${o.source === 'catalogue' ? 'a catalogue' : 'its authors'})</span></li>`;
   }).join('')}</ul>`;
-  h += `<p class="muted small">Each use of a definition with a declared domain (<code>@[domain]</code>), and whether its arguments are shown to be in it from what is in scope where it sits: the hypotheses before it, the left side of an <code>∧</code>, the condition of an <code>if</code>. “Not shown” means the analyzer's dischargers did not prove it${meta?.dischargers ? ` (${meta.dischargers.map(d => `<code>${esc(d)}</code>`).join(', ')})` : ''}: it may still follow, by an argument they do not find.</p>`;
+  h += body
+    ? `<p class="muted small">Each use in its body of a definition with a declared domain (<code>@[domain]</code>), and whether it stays inside that domain wherever the arguments are in this definition's own: from the declared domain, the case of the definition it sits in, the condition of an <code>if</code>. “Does not matter” means that where it leaves the domain, the body is the same whatever value the use takes there (<code>0 * log 0</code>). “Not shown” means`
+    : `<p class="muted small">Each use of a definition with a declared domain (<code>@[domain]</code>), and whether its arguments are shown to be in it from what is in scope where it sits: the hypotheses before it, the left side of an <code>∧</code>, the condition of an <code>if</code>, what a binder ranges over, and almost every point of an integral. “Not shown” means`;
+  h += ` the analyzer's dischargers did not prove it${meta?.dischargers ? ` (${meta.dischargers.map(d => `<code>${esc(d)}</code>`).join(', ')})` : ''}: it may still follow, by an argument they do not find.</p>`;
   return h;
 }
 function pinsHtml(e) {
@@ -490,7 +497,7 @@ async function renderDecl(name) {
   h += '<div class="facts">';
   if (e.claim) h += `<p><b>Claim</b>${e.claim.label ? ` — ${esc(e.claim.label)}` : ''}, from ${esc(e.claim.source)}. <a href="#/claims">All claims</a>.</p>`;
   if (e.specifies.length) h += `<p><b>Part of the specification of</b> ${e.specifies.map(s => declLink(s.target) + (s.comment ? ` <span class="muted">(${md(s.comment, true)})</span>` : '')).join(', ')}.</p>`;
-  if (!e.isProp) h += domainHtml(e) + pinsHtml(e);
+  if (!e.isProp) h += domainHtml(e) + wellDefinedHtml(e) + pinsHtml(e);
   else h += wellDefinedHtml(e);
   h += '</div>';
   if (e.provenance && S.ledger) {
