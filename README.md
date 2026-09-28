@@ -75,7 +75,7 @@ only* and outside every count. That can be many times more declarations: it is f
 ## Reviews
 
 With `--evidence` (a store's directory, or a JSONL file of records), the site has two modes, switched
-in the side bar; every badge, count and list follows the one chosen.
+in the side bar; every badge, count and list follows the one chosen. It opens on the community's.
 
 **Mine** is a private review in the reader's browser: a verdict (accept, problem, question), the
 failure mode of a problem, what it was compared with, which failure modes were checked, caveats, the

@@ -25,7 +25,9 @@ const MODE_KEY = () => `trust-site:mode:${S.repo}:${S.root}`;
 let mode = 'mine', policy = {...RV.DEFAULT_POLICY};
 const community = () => mode === 'community' && !!S.community;
 function loadMode() {
-  try { mode = localStorage.getItem(MODE_KEY()) || 'mine'; } catch (e) { }
+  // A site with a store opens on its reviews; the reader's own is a choice, remembered.
+  mode = S.community ? 'community' : 'mine';
+  try { mode = localStorage.getItem(MODE_KEY()) || mode; } catch (e) { }
   if (!S.community) mode = 'mine';
   policy = RV.loadPolicy(S.issuesRepo || S.repo);
 }
