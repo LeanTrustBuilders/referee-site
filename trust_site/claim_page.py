@@ -32,7 +32,7 @@ from evidence_core.store import Store
 from evidence_core.views import record_view
 from evidence_store.forms import FORMS as STORE_FORMS
 
-from .build import Options, STATIC, build
+from .build import Options, STATIC, build, versioned_page
 
 #: The store's issue forms (evidence-store's), by kind.
 FORMS = {kind: form["file"] for kind, form in STORE_FORMS.items()}
@@ -93,7 +93,7 @@ def build_claim(opt: ClaimOptions) -> dict:
                            repo=repo, issues_repo=repo, title=opt.title))
     out = opt.out
     shutil.move(out / "index.html", out / "site.html")
-    shutil.copy(STATIC / "claim.html", out / "index.html")
+    (out / "index.html").write_text(versioned_page(STATIC / "claim.html"), encoding="utf-8")
 
     old = {}
     for p in opt.at:

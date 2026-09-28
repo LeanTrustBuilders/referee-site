@@ -112,6 +112,23 @@ class BuildTests(unittest.TestCase):
                 build(Options(dataset=V / "fixture-b", out=out, modules=["Fixture.Nope"]))
 
 
+class AssetTests(unittest.TestCase):
+    def test_assets_are_versioned_by_their_content(self):
+        # A browser holding the previous build's scripts must fetch the new ones at once.
+        import hashlib
+        import re
+        from trust_site.build import STATIC
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "site"
+            build(Options(dataset=V / "fixture-b", out=out))
+            page = (out / "index.html").read_text()
+            refs = re.findall(r'assets/([\w.-]+)\?v=(\w+)"', page)
+            self.assertIn("app.js", {n for n, _ in refs})
+            for name, v in refs:
+                self.assertEqual(v, hashlib.sha256((STATIC / name).read_bytes()).hexdigest()[:10])
+                self.assertTrue((out / "assets" / name).exists())
+
+
 class FullGraphTests(unittest.TestCase):
     """The dependency graph's second view: `term` edges, proofs included. `Fixture.one`'s value has a
     proof field, whose lemma `one_pos'` its `term` edges reach and its `meaning` edges do not."""

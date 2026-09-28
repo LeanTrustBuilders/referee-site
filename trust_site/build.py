@@ -72,6 +72,19 @@ class Options:
     full_graph: bool = False
 
 
+def versioned_page(page: Path) -> str:
+    """The page shell with each asset it loads versioned by its content (`assets/app.js?v=…`): a
+    browser that cached the previous build's scripts fetches the new ones at once, rather than
+    running old code on new data until its cache expires."""
+    import hashlib
+
+    def version(m: re.Match) -> str:
+        name = m.group(1)
+        digest = hashlib.sha256((STATIC / name).read_bytes()).hexdigest()[:10]
+        return f'assets/{name}?v={digest}"'
+    return re.sub(r'assets/([\w.-]+\.(?:js|css))"', version, page.read_text(encoding="utf-8"))
+
+
 def shard_of(name: str, shards: int) -> int:
     """The hover shard of a name: FNV-1a over its UTF-16 code units, as the page computes it."""
     h = 0x811C9DC5
@@ -473,7 +486,7 @@ def build(opt: Options) -> dict:
         shutil.rmtree(out)
     (out / "data" / "m").mkdir(parents=True)
     shutil.copytree(STATIC, out / "assets", ignore=shutil.ignore_patterns("index.html"))
-    shutil.copy(STATIC / "index.html", out / "index.html")
+    (out / "index.html").write_text(versioned_page(STATIC / "index.html"), encoding="utf-8")
     compact = {"ensure_ascii": False, "separators": (",", ":")}
     (out / "data" / "site.json").write_text(json.dumps(site, **compact), encoding="utf-8")
     if ev:
