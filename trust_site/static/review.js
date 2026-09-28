@@ -103,12 +103,12 @@ const RV = (() => {
     if (checked.length || unchecked.length)
       body += `<div class="t-checks">${checked.length ? `<span class="lbl">Checked</span> ${checked.map(([c, t]) => `<span class="ck yes">${modeName(c, t)}</span>`).join('')}` : ''}${unchecked.length ? ` <span class="lbl">Not checked</span> ${unchecked.map(([c, t]) => `<span class="ck no">${modeName(c, t)}</span>`).join('')}` : ''}</div>`;
     if ((r.caveats || []).length) body += `<ul class="t-caveats">${r.caveats.map(c => `<li><b>${esc(c.category)}</b> ${md(c.note, true)}</li>`).join('')}</ul>`;
-    if (r.rationale) body += `<div class="t-text">${md(r.rationale)}</div>`;
+    if (r.text) body += `<div class="t-text">${md(r.text)}</div>`;
     if (r.fix) body += `<div class="t-text"><span class="lbl">Suggested fix</span><pre>${esc(r.fix)}</pre></div>`;
     if (body) h += `<div class="t-body">${body}</div>`;
     const replies = (r.replies || []).map(id => ctx.recs.get(id)).filter(Boolean);
     const events = [...replies.map(c => ({at: c.at, html: `<div class="reply"><div class="t-head"><span class="by">${who(c.by)}</span> · ${when(c.at)}</div><div class="t-text">${md(c.text)}</div></div>`})),
-      ...(r.statuses || []).map(s => ({at: s.at, html: `<div class="event">${who(s.by)} marked it <b>${esc(STATE[s.state] || s.state)}</b>${s.commit ? ` in <code>${esc(s.commit.slice(0, 12))}</code>` : ''} · ${when(s.at)}${s.note ? ` — ${md(s.note, true)}` : ''}</div>`}))]
+      ...(r.statuses || []).map(s => ({at: s.at, html: `<div class="event">${who(s.by)} marked it <b>${esc(STATE[s.state] || s.state)}</b>${s.commit ? ` in <code>${esc(s.commit.slice(0, 12))}</code>` : ''} · ${when(s.at)}${s.text ? ` — ${md(s.text, true)}` : ''}</div>`}))]
       .sort((a, b) => a.at < b.at ? -1 : 1);
     if (events.length) h += `<div class="t-events">${events.map(e => e.html).join('')}</div>`;
     const acts = statusActions(ctx, r);

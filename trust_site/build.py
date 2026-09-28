@@ -429,7 +429,6 @@ def build(opt: Options) -> dict:
         "title": title, "root": root, "repo": repo, "commit": commit, "toolchain": ds.toolchain,
         "issuesRepo": opt.issues_repo or repo,
         "producer": ds.producer(), "hasher": ds.hasher,
-        "subject": {"commit": commit, "toolchain": ds.toolchain, "hasher": ds.hasher},
         "scope": {"mode": mode, "seeds": opt.only if opt.only else (cl.names if mode == "claims" else []),
                   "modules": opt.modules, "inModules": in_modules,
                   "size": len(scope) - len(proof_only), "library": len(project), "pulled": len(pulled),

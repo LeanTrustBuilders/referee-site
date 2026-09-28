@@ -125,16 +125,16 @@ function githubLogin() {
 }
 // My review as an S3 record (evidence-core's shape): what the store's forms would have recorded.
 function recordOf(d, a, login) {
-  const rec = {schema: 'ltb-evidence/0', kind: 'review', subject: d.subject, verdict: a.verdict,
+  const rec = {schema: 'ltb-evidence/1', kind: 'review', subject: d.subject, verdict: a.verdict,
     by: {kind: 'person', identity: {kind: 'github', id: login}, ...(a.involvement ? {involvement: a.involvement} : {})},
     at: a.at, origin: {kind: 'site', ref: location.href.split('#')[0]}};
-  if (a.verdict === 'problem') rec.problem = {category: a.category || 'other'};
+  if (a.verdict === 'problem') rec.category = a.category || 'other';
   if (a.reference) { const url = a.reference.match(/https?:\/\/\S+/); rec.reference = {text: a.reference, ...(url ? {url: url[0].replace(/[).,]+$/, '')} : {})}; }
   const checked = Object.fromEntries(Object.entries(a.checked || {}).filter(([, v]) => v));
   if (Object.keys(checked).length) rec.checked = checked;
   if (a.caveats) rec.caveats = a.caveats.split('\n').map(l => l.trim()).filter(Boolean).map(note => {
     const m = note.match(/^(F\d|naming|other)\s*[:—-]\s*(.*)$/); return m ? {category: m[1], note: m[2]} : {category: 'other', note}; });
-  if (a.note) rec.rationale = a.note;
+  if (a.note) rec.text = a.note;
   return rec;
 }
 async function exportRecords() {
@@ -161,9 +161,9 @@ function importRecords(file) {
     for (const line of t.split('\n')) {
       if (!line.trim()) continue;
       let r; try { r = JSON.parse(line); } catch (e) { continue; }
-      if (r.kind !== 'review' || !r.subject) continue;
+      if (r.schema !== 'ltb-evidence/1' || r.kind !== 'review' || !r.subject) continue;
       const row = byName.get(r.subject.name); if (!row) continue;
-      audit.decls[r.subject.name] = {verdict: r.verdict, category: r.problem?.category, note: r.rationale || '',
+      audit.decls[r.subject.name] = {verdict: r.verdict, category: r.category, note: r.text || '',
         reference: r.reference?.text || '', checked: r.checked || {}, involvement: r.by?.involvement,
         caveats: (r.caveats || []).map(c => `${c.category}: ${c.note}`).join('\n'),
         meaning: (r.subject.hashes || {}).meaning, at: r.at}; n++;
@@ -831,7 +831,7 @@ function renderChanges() {
   const ch = S.changes; if (!ch) return notFound();
   const cnt = ch.counts, L = ch.lists;
   let h = pagerFor('#/changes') + `<h1>Changes</h1>` + scopeNotice() + `<p>Compared against the baseline build of <code>${esc(ch.baseline.commit.slice(0, 12))}</code>: ${ch.baseline.decls.toLocaleString('en')} declarations then, ${ch.current.decls.toLocaleString('en')} now. This page is for a reader who has already worked through that revision and needs to know what their reading no longer covers.</p>`;
-  if (!ch.comparable) h += `<div class="notice warn">The two builds were hashed by different hasher revisions, so every declaration may appear changed.</div>`;
+  if (!ch.comparable) h += `<div class="notice warn">The two builds were hashed by different hashers, so every declaration may appear changed.</div>`;
   const section = (k, title, text) => {
     const names = L[k] || []; if (!names.length) return '';
     return `<hr><h2>${title} (${names.length})</h2><p>${text}</p><details ${names.length <= 30 ? 'open' : ''}><summary>Show the ${names.length}</summary><ul>${names.map(n => `<li>${k === 'removed' ? `<code>${esc(n)}</code>` : declLink(n)}</li>`).join('')}</ul></details>`;

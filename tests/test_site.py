@@ -178,7 +178,7 @@ class TrustIndexTests(unittest.TestCase):
             recs = [evrec.with_id({"schema": evrec.SCHEMA, "kind": "review", "verdict": "accept",
                                    "subject": evrec.subject_from_decl(A.by_name[F + n], A),
                                    "by": {"kind": "person", "identity": {"kind": "github", "id": "someone"}},
-                                   "at": "2026-09-01T00:00:00Z", "rationale": "read it"})
+                                   "at": "2026-09-01T00:00:00Z", "text": "read it"})
                     for n in ("triple", "double", "triple_one")]
             # A withdrawn review is no mark.
             recs.append(evrec.with_id({"schema": evrec.SCHEMA, "kind": "status", "target": recs[2]["id"],
@@ -245,15 +245,15 @@ class ClaimPageTests(unittest.TestCase):
             agent = {"kind": "agent", "identity": {"kind": "github", "id": "alice"},
                      "agent": {"tool": "Claude Code", "model": "claude-opus-5-5"}}
             def review(name, verdict="accept", by=person, ds=A, **extra):
-                return {"schema": "ltb-evidence/0", "kind": "review", "subject": evrec.subject_from_decl(ds.by_name[F + name], ds),
+                return {"schema": evrec.SCHEMA, "kind": "review", "subject": evrec.subject_from_decl(ds.by_name[F + name], ds),
                         "verdict": verdict, "by": by, "at": "2026-09-26T10:00:00Z",
                         "origin": {"kind": "issue", "ref": "owner/lib#1"}, **extra}
-            [acc, prob, old] = store.add([review("triple", rationale="ok", by=agent),
-                                          review("triple", "problem", problem={"category": "F3"}, rationale="at 0"),
+            [acc, prob, old] = store.add([review("triple", text="ok", by=agent),
+                                          review("triple", "problem", category="F3", text="at 0"),
                                           review("triple_pos")])
-            store.add([{"schema": "ltb-evidence/0", "kind": "comment", "text": "agreed", "links": {"replies_to": prob["id"]},
+            store.add([{"schema": evrec.SCHEMA, "kind": "comment", "text": "agreed", "links": {"replies_to": prob["id"]},
                         "by": person, "at": "2026-09-26T11:00:00Z", "subject": prob["subject"]},
-                       {"schema": "ltb-evidence/0", "kind": "status", "target": prob["id"], "state": "fixed",
+                       {"schema": evrec.SCHEMA, "kind": "status", "target": prob["id"], "state": "fixed",
                         "commit": "B", "by": person, "at": "2026-09-26T12:00:00Z"}])
             r = build_claim(ClaimOptions(dataset=V / "fixture-b", out=tmp / "page", store=tmp / "evidence",
                                          source=V / "source-b", at=[V / "fixture-a"]))
@@ -339,8 +339,8 @@ class PinsTests(unittest.TestCase):
             alice = {"kind": "person", "identity": {"kind": "github", "id": "alice"}}
             subject = lambda n: evrec.subject_from_decl(ds.by_name[F + n], ds)
             store.add([{"schema": evrec.SCHEMA, "kind": "test", "subject": subject("triple"), "test": {"name": F + "triple_pos"},
-                        "checks": "triple is positive", "by": alice, "at": "2026-09-27T10:00:00Z", "origin": {"kind": "issue", "ref": "owner/lib#4"}},
-                       {"schema": evrec.SCHEMA, "kind": "challenge", "subject": subject("triple"), "property": "triple is injective",
+                        "text": "triple is positive", "by": alice, "at": "2026-09-27T10:00:00Z", "origin": {"kind": "issue", "ref": "owner/lib#4"}},
+                       {"schema": evrec.SCHEMA, "kind": "challenge", "subject": subject("triple"), "text": "triple is injective",
                         "by": alice, "at": "2026-09-27T11:00:00Z", "origin": {"kind": "issue", "ref": "owner/lib#5"}}])
             build(Options(dataset=ds_dir, out=tmp / "site", source=V / "source-b", evidence=tmp / "evidence"))
             site = json.loads((tmp / "site" / "data" / "site.json").read_text())
@@ -399,7 +399,7 @@ class CommunityTests(unittest.TestCase):
             agent = {"kind": "agent", "identity": {"kind": "github", "id": "alice"}, "agent": {"tool": "Claude Code"}}
             review = lambda n, **x: {"schema": evrec.SCHEMA, "kind": "review", "subject": evrec.subject_from_decl(B.by_name[F + n], B),
                                       "by": agent, "at": "2026-09-27T10:00:00Z", "origin": {"kind": "issue", "ref": "owner/lib#1"}, **x}
-            [acc] = store.add([review("triple", verdict="accept", rationale="checked", checked={"F3": "checked"})])
+            [acc] = store.add([review("triple", verdict="accept", text="checked", checked={"F3": "checked"})])
             store.add([{"schema": evrec.SCHEMA, "kind": "comment", "text": "agreed", "links": {"replies_to": acc["id"]},
                         "by": agent, "at": "2026-09-27T11:00:00Z"}])
             build(Options(dataset=V / "fixture-b", out=tmp / "site", source=V / "source-b", evidence=tmp / "evidence"))

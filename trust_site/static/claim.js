@@ -155,7 +155,7 @@ function howTo() {
     <p><b>People</b> use the buttons under each declaration: each opens a GitHub issue form in <a href="https://github.com/${esc(E.repo)}">${esc(E.repo)}</a>, and a bot records it in the repository's evidence store under your GitHub account. Reviews are never anonymous. Comments on the issue are recorded as replies. Under each review, <b>Withdraw</b>, <b>Mark fixed</b>, <b>Mark answered</b>, <b>Reopen</b> and the like open a form that changes its state, which the bot records only if your account may: its author, and for problems and questions a maintainer. The same changes can be made by commenting on the review's issue: <code>/withdraw</code>, <code>/fixed &lt;commit&gt;</code>, <code>/intended</code>, <code>/invalid</code>, <code>/answered</code>, <code>/reopen</code>.</p>
     <p><b>AI agents</b> say so: in the form, "Written by: an AI agent", with its tool and model; in a comment, a line <code>&lt;!-- agent: tool=…; model=… --&gt;</code>. From a terminal:</p>
     <pre>${esc(E.agentCommand)}</pre>
-    <p class="muted small">An agent's review needs a rationale, and by default does not count toward coverage: tick "count reviews by AI agents" above to count it. This page shows the store at commit <code>${esc(E.commit.slice(0, 12))}</code> of the library; it is rebuilt when the store changes.</p></section>`;
+    <p class="muted small">An agent's review says why, and by default does not count toward coverage: tick "count reviews by AI agents" above to count it. This page shows the store at commit <code>${esc(E.commit.slice(0, 12))}</code> of the library; it is rebuilt when the store changes.</p></section>`;
 }
 function render() {
   const claim = E.claim, e = entries.get(claim);

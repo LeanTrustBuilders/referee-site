@@ -216,8 +216,8 @@ def marks(ds: Dataset, opt: IndexOptions, trusted_packages: list[str]) -> dict:
                 commit = subject.get("commit", "")
                 note = f"{r.get('verdict', '?')} by {evrec.who(r.get('by', {})) or 'someone'}" + \
                     (f" on {r['at'][:10]}" if r.get("at") else "")
-                if r.get("rationale"):
-                    note += f": {r['rationale']}"
+                if r.get("text"):
+                    note += f": {r['text']}"
                 if s.applies and r.get("verdict") == "accept":
                     trusted[name] = {"name": name, "commit": commit, "note": note}
                 entry = {"name": name, "note": note, "status": PROTECTION.get(s.state, "unrecorded")}
@@ -225,7 +225,7 @@ def marks(ds: Dataset, opt: IndexOptions, trusted_packages: list[str]) -> dict:
                     entry.update(recordedHash=(subject.get("hashes") or {}).get("meaning", ""),
                                  currentHash=s.decl.meaning if s.decl else "", recordedAt=commit)
                 protected[name] = entry
-    return {"version": 1, "hasher": ds.hasher.get("name", ""), "trusted": list(trusted.values()),
+    return {"version": 1, "hasher": ds.hasher.get("meaning", ""), "trusted": list(trusted.values()),
             "characterizations": characterizations(ds), "protected": list(protected.values()),
             "trustedPackages": trusted_packages}
 
