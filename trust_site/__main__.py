@@ -32,6 +32,11 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--modules", action="append", default=[], metavar="MODULE",
                    help="a slice of the library: the declarations of this module and its submodules, and "
                         "what their statements rest on (repeatable)")
+    b.add_argument("--full-graph", action="store_true",
+                   help="close a scoped site (--claims-only, --only, --modules) under the full graph too, "
+                        "proofs included, and offer it as a second view of the dependency graph: many more "
+                        "declarations, every count still over what the statements rest on. A site of the "
+                        "whole library has the view without it")
     b.add_argument("--claim", action="append", default=[], metavar="NAME",
                    help="name a main result explicitly; repeatable; overrides discovery")
     b.add_argument("--comparator", type=Path, help="where the Comparator configs are (auto-detected otherwise)")
@@ -78,14 +83,16 @@ def main(argv: list[str] | None = None) -> int:
               f"{r['trusted']} trusted, {r['characterized']} characterized, {r['reviewed']} reviewed → {r['out']}")
         return 0
     result = build(Options(dataset=args.dataset, out=args.out, source=args.source, baseline=args.baseline,
-                           evidence=args.evidence, ledger=args.ledger, claims_only=args.claims_only, only=args.only,
+                           evidence=args.evidence, ledger=args.ledger, claims_only=args.claims_only, full_graph=args.full_graph, only=args.only,
                            modules=args.modules,
                            claim=args.claim, comparator=args.comparator, trust=args.trust,
                            title=args.title, repo=args.repo, issues_repo=args.issues_repo))
     for w in result["warnings"]:
         print(f"warning: {w}", file=sys.stderr)
-    print(f"site: {result['decls']} declarations in {result['modules']} modules, {result['claims']} claims "
-          f"→ {args.out}")
+    full = (f", {result['proofOnly']} of them only for proofs" if result["proofOnly"] else "") + \
+        (", with the full graph" if result["fullGraph"] else "")
+    print(f"site: {result['decls']} declarations in {result['modules']} modules, {result['claims']} claims"
+          f"{full} → {args.out}")
     return 0
 
 

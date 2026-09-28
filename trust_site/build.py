@@ -12,6 +12,8 @@ keeps the reader's own audit. The output is:
   of the Theorems, Specifications, Sorries and Changes pages;
 * ``data/decls.json`` — one compact row per declaration in scope, for Browse, search and coverage;
 * ``data/graph.json`` — the meaning edges between declarations in scope, for graphs and coverage;
+* ``data/graph-full.json`` — the `term` edges between them, proofs included, when the site has a full
+  graph: the dependency graph's second view, loaded when a reader asks for it;
 * ``data/m/<n>.json`` — per module, everything its declarations' pages show.
 """
 from __future__ import annotations
@@ -64,6 +66,10 @@ class Options:
     title: str | None = None
     repo: str | None = None          # owner/name, for links to the source and to issues
     issues_repo: str | None = None   # where "Open an issue" goes, if not the project's repository
+    # A scoped site closed under the full graph (`term`, proofs included) as well: the declarations
+    # only proofs use get pages, and the dependency graph a second view. A site of the whole library
+    # has that view without it, since every declaration is already there.
+    full_graph: bool = False
 
 
 def shard_of(name: str, shards: int) -> int:
@@ -152,6 +158,28 @@ def build(opt: Options) -> dict:
     else:
         # A deprecated declaration is kept only so that older code compiles: not what the library puts forward.
         scope_ids, pulled = {d.id for d in project if d.name not in deprecated}, set()
+    # The full graph: what each declaration rests on, its proofs included (`term`). A second view of
+    # the dependency graph only: coverage, reviews and changes stay on `meaning`, since Lean checks the
+    # proofs. A site of the whole library has it whenever the dataset does; a scoped site only when
+    # asked, since it is then closed under it too, and the declarations only proofs use, many more,
+    # get pages of their own (`proof_only`), outside every count.
+    has_term = any(e["name"] == "term" for e in ds.meta.get("edges", []))
+    full_graph = has_term and (mode == "full" or opt.full_graph)
+    if opt.full_graph and not has_term:
+        raise SystemExit("--full-graph: the dataset has no `term` edges (extracted with --no-term)")
+    term = ds.edges("term") if full_graph else {}
+    proof_only: set[int] = set()
+    if full_graph and mode != "full":
+        frontier = list(scope_ids)
+        reached = set(scope_ids)
+        while frontier:
+            x = frontier.pop()
+            for t in list(term.get(x, ())) + list(meaning.get(x, ())):
+                if t not in reached and by_id[t].is_project:
+                    reached.add(t)
+                    frontier.append(t)
+        proof_only = reached - scope_ids
+        scope_ids = reached
     scope = [d for d in project if d.id in scope_ids]
     scope_set = {d.id for d in scope}
     by_name_scope = {d.name: d for d in scope}
@@ -192,6 +220,15 @@ def build(opt: Options) -> dict:
             for t in ts:
                 if t in scope_set:
                     users[t].append(s)
+
+    # Who uses a declaration only proofs use: the proofs that do.
+    proof_users: dict[int, list[int]] = defaultdict(list)
+    if proof_only:
+        for s, ts in term.items():
+            if s in scope_set:
+                for t in ts:
+                    if t in proof_only:
+                        proof_users[t].append(s)
 
     # Lean's kernel check of each closure (trust-extract check), along each notion the dataset was checked along.
     kernel_rows = {n: ds.facet(f"check.kernel.{n}") for n in kernel_notions(ds)}
@@ -265,6 +302,9 @@ def build(opt: Options) -> dict:
             "outside": sorted(by_id[t].name for t in meaning.get(d.id, ()) if by_id[t].is_project and t not in scope_set),
             "external": sorted([by_id[t].name, upstream_pkg.get(t, ""), by_id[t].kind] for t in ext),
             "users": sorted(users.get(d.id, [])),
+            # On the site only because proofs use it: which proofs.
+            "proofOnly": d.id in proof_only,
+            "proofUsers": sorted(by_id[s].name for s in proof_users.get(d.id, []))[:60] if d.id in proof_only else [],
             "sorry": so.uses, "ownSorry": so.own, "sorryVia": list(so.via) if so.uses and not so.own else [],
             "kernel": kernel_of(d.name),
             # What its attributes say: where else it is described, and whether it is deprecated.
@@ -335,15 +375,18 @@ def build(opt: Options) -> dict:
                 for p in packages]
 
     # --- summaries ---------------------------------------------------------------------------------
-    theorems = [d for d in scope if d.is_prop and keyword.get(d.name) == "theorem"]
+    # Every count is over what the statements rest on: not the declarations only proofs use.
+    counted = [d for d in scope if d.id not in proof_only]
+    theorems = [d for d in counted if d.is_prop and keyword.get(d.name) == "theorem"]
     counts = {
-        "decls": len(scope), "library": len(project),
-        "deprecated": sum(1 for d in project if d.name in deprecated), "deprecatedShown": sum(1 for d in scope if d.name in deprecated),
-        "theorems": len(theorems), "lemmas": sum(1 for d in scope if d.is_prop) - len(theorems),
-        "definitions": sum(1 for d in scope if not d.is_prop),
-        "sorry": sum(1 for d in scope if sorry[d.name].uses),
-        "ownSorry": sum(1 for d in scope if sorry[d.name].own),
-        "extraAxioms": sorted({a for d in scope for a in analysis.extra_axioms(ds, d.name)}),
+        "decls": len(counted), "library": len(project),
+        "deprecated": sum(1 for d in project if d.name in deprecated), "deprecatedShown": sum(1 for d in counted if d.name in deprecated),
+        "theorems": len(theorems), "lemmas": sum(1 for d in counted if d.is_prop) - len(theorems),
+        "definitions": sum(1 for d in counted if not d.is_prop),
+        "sorry": sum(1 for d in counted if sorry[d.name].uses),
+        "ownSorry": sum(1 for d in counted if sorry[d.name].own),
+        "extraAxioms": sorted({a for d in counted for a in analysis.extra_axioms(ds, d.name)}),
+        "proofOnly": len(proof_only),
     }
     modules_json = []
     for m in module_names:
@@ -377,8 +420,16 @@ def build(opt: Options) -> dict:
         "subject": {"commit": commit, "toolchain": ds.toolchain, "hasher": ds.hasher},
         "scope": {"mode": mode, "seeds": opt.only if opt.only else (cl.names if mode == "claims" else []),
                   "modules": opt.modules, "inModules": in_modules,
-                  "size": len(scope), "library": len(project), "pulled": len(pulled)},
+                  "size": len(scope) - len(proof_only), "library": len(project), "pulled": len(pulled),
+                  "proofOnly": len(proof_only)},
         "counts": counts,
+        # The dependency graph's second view, when the site has it: `term` edges between its
+        # declarations, and how many leave it (to deprecated declarations, on a site of the whole
+        # library); the declarations on the site only because proofs use them.
+        "fullGraph": ({"outside": sum(1 for d in scope for t in term.get(d.id, ())
+                                      if by_id[t].is_project and t not in scope_set)}
+                      if full_graph else None),
+        "proofOnly": sorted(proof_only),
         "chapters": chapter_list, "modules": modules_json,
         "packages": pkg_list, "trust": sorted(trusted - {"lean4"}), "trustGiven": sorted(opt.trust),
         "claims": {"claims": [c.as_json() for c in cl.claims], "scope": cl.scope, "sources": cl.sources,
@@ -433,6 +484,9 @@ def build(opt: Options) -> dict:
     (out / "data" / "decls.json").write_text(json.dumps(rows, **compact), encoding="utf-8")
     graph = {str(d.id): [t for t in meaning.get(d.id, ()) if t in scope_set] for d in scope}
     (out / "data" / "graph.json").write_text(json.dumps(graph, **compact), encoding="utf-8")
+    if full_graph:
+        full = {str(d.id): [t for t in term.get(d.id, ()) if t in scope_set and t != d.id] for d in scope}
+        (out / "data" / "graph-full.json").write_text(json.dumps(full, **compact), encoding="utf-8")
     for i, entries in shards.items():
         (out / "data" / "m" / f"{i}.json").write_text(json.dumps(entries, **compact), encoding="utf-8")
     (out / "data" / "tips").mkdir()
@@ -442,7 +496,7 @@ def build(opt: Options) -> dict:
     for k in range(tip_shards):
         (out / "data" / "tips" / f"{k}.json").write_text(json.dumps(by_shard.get(k, {}), **compact), encoding="utf-8")
     return {"decls": len(scope), "modules": len(module_names), "claims": len(cl.claims),
-            "warnings": cl.warnings}
+            "proofOnly": len(proof_only), "fullGraph": full_graph, "warnings": cl.warnings}
 
 
 def characterizations_of(ds: Dataset, chars: dict, by_name: dict, scope: set, meaning: dict) -> dict:

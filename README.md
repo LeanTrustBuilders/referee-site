@@ -39,6 +39,24 @@ reader judging a claim needs, and no dependency edge points at them). `--only DE
 a claim set of one. Every count on a scoped site is over the scope, and the home page says so first.
 On alpha-rar, 6 claims give a site of 53 declarations out of 815, as Referee's does.
 
+## The full graph
+
+A declaration's dependency graph shows what its meaning rests on: its statement, and a definition's
+value, with proofs erased. When the dataset has `term` edges (unless it was extracted with
+`--no-term`), the graph has a second view, **Full, proofs included**: everything it rests on,
+what its proofs use included, with what only proofs reach faded. The meaning graph stays the default,
+and every count, coverage figure, review list and change stays on it: Lean checks the proofs, and what
+they use is there to read, not to review.
+
+- A site of the whole library has the view whenever the dataset allows it: every declaration is
+  already on the site, so it costs one file (`data/graph-full.json`, loaded when a reader first asks
+  for it) and no page.
+- A scoped site (`--claims-only`, `--only`, `--modules`) has it only with `--full-graph`, which closes
+  the site under the full graph too. The declarations only proofs use get pages, which say which proofs
+  use them, and are marked *proof only* in lists; they are outside every count. That is many more
+  declarations: on Mathlib's probability claims, 30,103 instead of 1,629 (170 MB instead of 9 MB), and
+  a claim's full graph has 6,000 to 29,000 declarations, too many to draw. It is for small libraries.
+
 ## Two ways to review: mine, and the community's
 
 With `--evidence` (an evidence store's directory, or a JSONL file of records), the site has two modes,

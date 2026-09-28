@@ -253,3 +253,4 @@ ul.wd { padding-left: 18px; }
 ul.wd li { margin: 3px 0; }
 ul.wd li.wd-open > b, ul.wd li.wd-refuted > b, ul.wd li.wd-unapplied > b { color: var(--warn); }
 ul.wd li.wd-discharged > b, ul.wd li.wd-irrelevant > b { color: var(--good); }
+.graph .node.faded { opacity: .5; }

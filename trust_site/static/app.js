@@ -79,6 +79,13 @@ function accepted(id) {
   return v.verdict === 'accept' && !v.stale;
 }
 const idIndex = new Map();
+// The declarations on the site only because proofs use them (--full-graph): pages of their own, but
+// outside the lists and counts, which are over what the statements rest on.
+let PROOF_ONLY = new Set();
+const proofOnly = r => PROOF_ONLY.has(r[R.ID]);
+const proofOnlyBadge = r => proofOnly(r) ? ' <span class="badge" title="On this site only because a proof uses it">proof only</span>' : '';
+// The full graph (`term`, proofs included), loaded when a reader first asks for it.
+let GF = null;
 // Everything reachable from `roots` by `succ`, the roots included.
 function reach(roots, succ) {
   const seen = new Set(roots), stack = [...roots];
@@ -301,9 +308,11 @@ function scopeNotice() {
   if (!scoped()) return '';
   const sc = S.scope, seeds = sc.seeds.length;
   const pulled = sc.pulled ? `, ${plural(sc.pulled, 'theorem')} saying what those definitions mean` : '';
+  // With the full graph, what the proofs use is here too, outside the counts.
+  const proofs = sc.proofOnly ? `${sc.proofOnly === 1 ? 'The one declaration their proofs use besides is' : `The ${sc.proofOnly.toLocaleString('en')} declarations their proofs use besides are`} here too, for the full dependency graph, but outside every count, which is over these ${sc.size.toLocaleString('en')}.` : `What the proofs call is not here, and every count on this site is over these ${sc.size.toLocaleString('en')}.`;
   if (sc.mode === 'modules')
-    return `<div class="notice"><b>${plural(sc.size, 'declaration')}</b>: the ${sc.inModules.toLocaleString('en')} of ${sc.modules.map(m => `<code>${esc(m)}</code>`).join(' and ')}, the ${(sc.size - sc.inModules - sc.pulled).toLocaleString('en')} their <b>statements</b> rest on${pulled}, out of ${sc.library.toLocaleString('en')} the library exposes. What the proofs call is not here, and every count on this site is over these ${sc.size.toLocaleString('en')}.</div>`;
-  return `<div class="notice"><b>${plural(sc.size, 'declaration')}</b>: the ${plural(seeds, sc.mode === 'only' ? 'declaration' : 'result')} ${sc.mode === 'only' ? 'this site is built for' : 'this project puts forward'}, the ${(sc.size - seeds - sc.pulled).toLocaleString('en')} their <b>statements</b> rest on${pulled}, out of ${sc.library.toLocaleString('en')} the library exposes. What the proofs call is not here, and every count on this site is over these ${sc.size.toLocaleString('en')}.</div>`;
+    return `<div class="notice"><b>${plural(sc.size, 'declaration')}</b>: the ${sc.inModules.toLocaleString('en')} of ${sc.modules.map(m => `<code>${esc(m)}</code>`).join(' and ')}, the ${(sc.size - sc.inModules - sc.pulled).toLocaleString('en')} their <b>statements</b> rest on${pulled}, out of ${sc.library.toLocaleString('en')} the library exposes. ${proofs}</div>`;
+  return `<div class="notice"><b>${plural(sc.size, 'declaration')}</b>: the ${plural(seeds, sc.mode === 'only' ? 'declaration' : 'result')} ${sc.mode === 'only' ? 'this site is built for' : 'this project puts forward'}, the ${(sc.size - seeds - sc.pulled).toLocaleString('en')} their <b>statements</b> rest on${pulled}, out of ${sc.library.toLocaleString('en')} the library exposes. ${proofs}</div>`;
 }
 
 // Lean's kernel check of the dependencies this site shows (trust-extract check, read by evidence-core).
@@ -480,7 +489,7 @@ async function renderModule(i) {
   h += `<p>Module <code>${esc(m.name)}</code> contains ${plural(entries.length, 'exposed declaration')}.${m.path && S.repo ? ` <a href="https://github.com/${esc(S.repo)}/blob/${esc(S.commit)}/${esc(m.path)}">Source</a>` : ''}</p><ul class="decl-list">`;
   for (const e of entries) {
     const row = byName.get(e.name);
-    h += `<li><span class="n"><a href="${declHref(e.name)}">${esc(e.name)}</a> ${row[R.CHANGE] ? `<span class="badge ${row[R.CHANGE]}">${CHANGE_LABEL[row[R.CHANGE]]}</span>` : ''}</span><span class="m">${esc(e.kind)} · ${plural(row[R.DEPS], 'dep')}</span></li>`;
+    h += `<li><span class="n"><a href="${declHref(e.name)}">${esc(e.name)}</a>${proofOnlyBadge(row)} ${row[R.CHANGE] ? `<span class="badge ${row[R.CHANGE]}">${CHANGE_LABEL[row[R.CHANGE]]}</span>` : ''}</span><span class="m">${esc(e.kind)} · ${plural(row[R.DEPS], 'dep')}</span></li>`;
   }
   return h + '</ul>';
 }
@@ -494,6 +503,7 @@ async function renderDecl(name) {
   let h = pager(prev, next) + `<h1 class="decl">${esc(name)}</h1>`;
   if (e.change) h += `<div class="changebar"><span class="badge ${e.change.class}">${CHANGE_LABEL[e.change.class]}</span> since the previous build${e.change.was ? ` (was <code>${esc(e.change.was)}</code>)` : ''}${e.change.causes?.length ? `: rewritten beneath it: ${e.change.causes.map(c => declLink(c)).join(', ')}` : ''}</div>`;
   h += deprecationHtml(e) + cardHtml(e) + linksHtml(e);
+  if (e.proofOnly) h += `<div class="notice">On this site only because a proof uses it${e.proofUsers.length ? `: the proof${e.proofUsers.length === 1 ? '' : 's'} of ${e.proofUsers.slice(0, 8).map(n => declLink(n)).join(', ')}${e.proofUsers.length > 8 ? ', …' : ''}` : ''}. Nothing the site's results state rests on it, so it is outside every count: it is here for the full dependency graph.</div>`;
   h += '<div class="facts">';
   if (e.claim) h += `<p><b>Claim</b>${e.claim.label ? ` — ${esc(e.claim.label)}` : ''}, from ${esc(e.claim.source)}. <a href="#/claims">All claims</a>.</p>`;
   if (e.specifies.length) h += `<p><b>Part of the specification of</b> ${e.specifies.map(s => declLink(s.target) + (s.comment ? ` <span class="muted">(${md(s.comment, true)})</span>` : '')).join(', ')}.</p>`;
@@ -511,7 +521,10 @@ async function renderDecl(name) {
   // The characterized definitions of this graph: each can be taken from its characterization instead
   // of its construction, by the reader, one at a time (from the switches here or the node's card).
   const charsIn = [row[R.ID], ...closure(row[R.ID])].filter(i => (S.characterizations || {})[i]);
-  h += `<h3>Dependency graph</h3>${charsIn.length ? `<div class="seg dgviews" id="dgsubs"></div><p class="small muted" id="dgnote"></p>` : ''}<div class="graph" id="dg"></div>`;
+  // Two views when the site has the full graph: what the meaning rests on (the default, and what every
+  // count is over), and everything, proofs included.
+  const views = S.fullGraph ? `<div class="seg dgviews" id="dgnotion"><button data-notion="meaning" class="on" title="What its statement, and a definition's value, rest on: what reviews and coverage are over">Meaning</button><button data-notion="term" title="Everything it rests on, what its proofs use included">Full, proofs included</button></div>` : '';
+  h += `<h3>Dependency graph</h3>${views}${charsIn.length ? `<div class="seg dgviews" id="dgsubs"></div><p class="small muted" id="dgnote"></p>` : ''}<p class="small muted" id="dgfull" hidden></p><div class="graph" id="dg"></div>`;
   h += `<p><b>Audit surface:</b> ${plural(row[R.DEPS], 'project declaration')}, ${plural(row[R.EXT], 'external constant')}. ${b.total ? `${b.accepted}/${b.total} beneath ${community() ? 'reviewed by the community' : 'accepted'}${b.covered ? ' — covered' : ''}.` : ''}</p>`;
   if (e.outside?.length) h += `<p class="muted">Outside this scoped site: ${e.outside.map(x => `<code>${esc(x)}</code>`).join(', ')}.</p>`;
   if (e.external.length) h += `<details><summary class="muted">The external constants its statement rests on</summary><ul>${e.external.map(([n, p, k]) => `<li><code data-c="${esc(n)}">${esc(n)}</code> <span class="muted">${esc(p)} · ${esc(k)}</span></li>`).join('')}</ul></details>`;
@@ -534,7 +547,10 @@ async function renderDecl(name) {
     // definition and those instances excepted. Everything else stays as defined: a characterization
     // may hold on a smaller domain, and only the reader can judge that it covers this use.
     const subs = new Map();
+    // The view: `meaning`, or `term` for the full graph.
+    let notion = 'meaning';
     const graphOf = () => {
+      if (notion === 'term') { const succ = i => GF[i] || []; return {ids: [...reach([rootId], succ)], succ}; }
       const via = new Map(), skip = new Map();
       for (const [d, c] of subs) { via.set(d, c.thm); for (const s of c.structure) via.set(s, c.thm); skip.set(c.thm, new Set([d, ...c.structure])); }
       const succ = i => via.has(i) ? [via.get(i)] : (G[i] || []).filter(u => !(skip.get(i)?.has(u)));
@@ -600,7 +616,7 @@ async function renderDecl(name) {
     };
     // In a node's card: take it from its characterization, or back.
     const cardControl = id => {
-      const cs = chars[id]; if (!cs) return '';
+      const cs = chars[id]; if (!cs || notion === 'term') return '';
       if (subs.has(id)) return `<p><button class="btn" data-card-unsub="${id}">Back to its construction</button> <span class="muted small">taken from its characterization by <code>${esc(nameOf(subs.get(id).thm))}</code></span></p>`;
       return cs.map((c, k) => `<p><button class="btn" data-card-sub="${id}:${k}">Take it from its characterization by <code>${esc(nameOf(c.thm).split('.').pop())}</code></button> <span class="muted small">which holds ${holds(c)}</span></p>`).join('');
     };
@@ -617,10 +633,30 @@ async function renderDecl(name) {
     const audited = direct.filter(([, x]) => pkgs.get(x[1])?.trusted).length;
     let showAudited = false; try { showAudited = localStorage.getItem('trust-site:graph-upstream') === '1'; } catch (err) { }
     let force = false;
+    // The full view: what it adds, and that nothing is counted over it.
+    const fullNote = ids => {
+      const el = $('#dgfull'); if (!el) return;
+      el.hidden = notion !== 'term'; if (el.hidden) return;
+      const extra = ids.filter(i => !construction.has(i)).length;
+      el.innerHTML = `The full graph: everything it rests on, what its proofs use included. ${plural(ids.length, 'declaration')} instead of ${construction.size.toLocaleString('en')}, ${plural(extra, 'declaration')} only through proofs, faded. Reviews, coverage and the counts on this page stay on the meaning graph: Lean checks the proofs, and what they use is here to read, not to review.${S.fullGraph.outside && !scoped() ? ' Proofs may also use deprecated declarations, which this site leaves out.' : ''}`;
+    };
+    const nbox = $('#dgnotion');
+    if (nbox) nbox.querySelectorAll('[data-notion]').forEach(b => b.onclick = async () => {
+      if (b.dataset.notion === 'term' && !GF) {
+        b.disabled = true;
+        try { GF = await getJSON('data/graph-full.json'); } catch (err) { b.disabled = false; return; }
+        b.disabled = false;
+      }
+      notion = b.dataset.notion;
+      nbox.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+      force = false; draw();
+    });
     const draw = () => {
       const {ids, succ} = graphOf();
-      paintSubs(ids);
-      note(ids, succ);
+      const full = notion === 'term';
+      for (const id of ['#dgsubs', '#dgnote']) { const el = $(id); if (el) el.hidden = full; }
+      if (!full) { paintSubs(ids); note(ids, succ); }
+      fullNote(ids);
       if (ids.length > 600 && !force) {
         $('#dg').innerHTML = `<p class="muted">${plural(ids.length, 'declaration')}: too many to draw quickly. <button class="btn" id="dgforce">Draw anyway</button></p>`;
         $('#dgforce').onclick = () => { force = true; draw(); };
@@ -628,15 +664,15 @@ async function renderDecl(name) {
       }
       const set = new Set(ids), es = [];
       for (const i of ids) for (const u of succ(i)) if (set.has(u)) es.push([i, u]);
-      const ns = ids.map(i => { const r = D[idIndex.get(i)]; return {id: i, label: r[R.NAME].split('.').pop(), title: r[R.NAME], kind: r[R.KIND], href: declHref(r[R.NAME]), summary: r[R.SUMMARY], root: i === rootId, sorry: r[R.SORRY] > 0, audit: r[R.NAME]}; });
-      if (!subs.size)
+      const ns = ids.map(i => { const r = D[idIndex.get(i)]; return {id: i, label: r[R.NAME].split('.').pop(), title: r[R.NAME], kind: r[R.KIND], href: declHref(r[R.NAME]), summary: r[R.SUMMARY], root: i === rootId, sorry: r[R.SORRY] > 0, audit: r[R.NAME], faded: full && !construction.has(i)}; });
+      if (!subs.size && !full)
         direct.filter(([, x]) => showAudited || !pkgs.get(x[1])?.trusted).slice(0, 40).forEach(([n, x], j) => {
           const id = -1 - j; ns.push({id, label: n.split('.').pop(), title: n, constant: n, kind: x[2], upstream: x[1], trusted: !!pkgs.get(x[1])?.trusted}); es.push([rootId, id]); });
       graph($('#dg'), {nodes: ns, edges: es, unit: 'declaration', ...AUDIT_GRAPH,
         card: nodeCard, control: n => n.id >= 0 ? cardControl(n.id) : '',
-        extra: !subs.size && audited ? {label: showAudited ? 'Hide audited upstream' : `Show audited upstream (${audited})`, pressed: showAudited,
+        extra: !subs.size && !full && audited ? {label: showAudited ? 'Hide audited upstream' : `Show audited upstream (${audited})`, pressed: showAudited,
           onClick: () => { showAudited = !showAudited; try { localStorage.setItem('trust-site:graph-upstream', showAudited ? '1' : '0'); } catch (err) { } draw(); }} : null,
-        caption: `${plural(ids.length, 'declaration')} across the dependency rows; the top row depends on nothing. ${subs.size ? 'A definition taken from its characterization points to it. ' : ''}Click a node to read it here.`});
+        caption: `${plural(ids.length, 'declaration')} across the dependency rows; the top row depends on nothing. ${full ? 'A theorem points to what its proof uses too; faded, what only proofs reach. ' : subs.size ? 'A definition taken from its characterization points to it. ' : ''}Click a node to read it here.`});
     };
     draw();
   }];
@@ -665,17 +701,17 @@ function renderClaims() {
   }
   const kw = cl.claims.filter(c => byName.has(c.decl) && byName.get(c.decl)[R.KW] !== 'theorem');
   if (kw.length) h += `<p class="muted">Stated with <code>lemma</code> rather than <code>theorem</code>: ${kw.map(c => declLink(c.decl)).join(', ')}. A keyword the author may want to reconsider.</p>`;
-  const theorems = D.filter(r => r[R.KW] === 'theorem' && !cl.claims.some(c => c.decl === r[R.NAME]));
+  const theorems = D.filter(r => r[R.KW] === 'theorem' && !proofOnly(r) && !cl.claims.some(c => c.decl === r[R.NAME]));
   if (theorems.length && cl.claims.length) h += `<p class="muted">${plural(theorems.length, 'theorem')} that the claims pass over: machinery or omissions, which only the author can tell. They are on <a href="#/theorems">Theorems</a>.</p>`;
   if (cl.scope) h += `<p><b>What the project says it does and does not cover.</b> Its <code>status.scope</code>, verbatim — the place a formalization declares the weakened hypothesis or the omitted case that a list of theorem names cannot show.</p><blockquote class="readme">${md(cl.scope.replace(/\n+/g, '\n\n'))}</blockquote>`;
   if (cl.warnings.length) h += `<div class="notice warn">${cl.warnings.map(esc).join('<br>')}</div>`;
   return h;
 }
 function renderTheorems() {
-  const th = D.filter(r => r[R.KW] === 'theorem');
+  const th = D.filter(r => r[R.KW] === 'theorem' && !proofOnly(r));
   let h = pagerFor('#/theorems') + `<h1>The Theorems This Library States</h1>` + scopeNotice() +
     `<p>These are the declarations written with the <code>theorem</code> keyword, as opposed to <code>lemma</code>. The distinction is the author's own: by the usual convention a <code>theorem</code> is a result worth stating for its own sake, while a <code>lemma</code> is a step towards one. <b>So this list is only as good as the library's discipline about the two keywords.</b></p>
-    <p>${th.length} of ${D.length.toLocaleString('en')} declarations are stated as theorems, ranked within each chapter by how much machinery they rest on.</p>
+    <p>${th.length} of ${(D.length - PROOF_ONLY.size).toLocaleString('en')} declarations are stated as theorems, ranked within each chapter by how much machinery they rest on.</p>
     <p>${community() ? `Against each one is where it stands in the community's reviews, under <a href="#/community">your policy</a>: <i>reviewed</i> when a review your policy counts accepts it — and <i>covered</i> when, in addition, every declaration its statement rests on is reviewed too.` : `Against each one is what you have made of it. A declaration is <i>accepted</i> when you have read it and judged that it says what its name claims — and <i>covered</i> when, in addition, every declaration its statement rests on is accepted too.`} The gap between those two is the point: accepting a theorem whose definitions nobody has read accepts a sentence, not a theorem.</p>`;
   for (const ch of S.chapters) {
     const mods = new Set(ch.modules), rows = th.filter(r => mods.has(r[R.MOD])).sort((a, b) => b[R.DEPS] - a[R.DEPS]);
@@ -737,7 +773,7 @@ function renderBrowse() {
       const key = {name: r => r[R.NAME], kind: r => r[R.KIND], mod: r => S.modules[r[R.MOD]]?.short || '', deps: r => r[R.DEPS], ext: r => r[R.EXT], change: r => r[R.CHANGE], verdict: r => community() ? stateOf(r) : verdictOf(r[R.NAME]).verdict || ''}[sort[0]];
       rows.sort((a, b) => { const x = key(a), y = key(b); return (x < y ? -1 : x > y ? 1 : 0) * sort[1]; });
       $('#bcount').textContent = `${rows.length.toLocaleString('en')} declarations${rows.length > 800 ? ' — showing the first 800, narrow the filter to see the rest' : ''}`;
-      $('#bt').innerHTML = rows.slice(0, 800).map(r => `<tr><td class="n"><a href="${declHref(r[R.NAME])}">${esc(r[R.NAME])}</a></td><td class="k">${esc(r[R.KIND])}</td><td class="mod">${esc(S.modules[r[R.MOD]]?.short || '')}</td><td class="num">${r[R.DEPS]}</td><td class="num">${r[R.EXT]}</td>${S.changes ? `<td>${r[R.CHANGE] ? `<span class="badge ${r[R.CHANGE]}">${CHANGE_LABEL[r[R.CHANGE]]}</span>` : '<span class="faint">—</span>'}</td>` : ''}<td>${verdictBadge(r[R.NAME])}</td></tr>`).join('');
+      $('#bt').innerHTML = rows.slice(0, 800).map(r => `<tr><td class="n"><a href="${declHref(r[R.NAME])}">${esc(r[R.NAME])}</a>${proofOnlyBadge(r)}</td><td class="k">${esc(r[R.KIND])}</td><td class="mod">${esc(S.modules[r[R.MOD]]?.short || '')}</td><td class="num">${r[R.DEPS]}</td><td class="num">${r[R.EXT]}</td>${S.changes ? `<td>${r[R.CHANGE] ? `<span class="badge ${r[R.CHANGE]}">${CHANGE_LABEL[r[R.CHANGE]]}</span>` : '<span class="faint">—</span>'}</td>` : ''}<td>${verdictBadge(r[R.NAME])}</td></tr>`).join('');
     };
     document.querySelectorAll('.filters input, .filters select').forEach(x => x.oninput = draw);
     $('#breset').onclick = () => { document.querySelectorAll('.filters input, .filters select').forEach(x => x.value = ''); draw(); };
@@ -893,6 +929,7 @@ async function route() {
 async function start() {
   [S, D, G] = await Promise.all([getJSON('data/site.json'), getJSON('data/decls.json'), getJSON('data/graph.json')]);
   D.forEach((r, i) => { byName.set(r[R.NAME], r); idIndex.set(r[R.ID], i); });
+  PROOF_ONLY = new Set(S.proofOnly || []);
   S.hasSpecs = Object.values(S.pins || {}).some(p => p.pinned);
   number(); loadAudit(); loadMode(); frame(); setupSearch(); setupTips();
   document.addEventListener('click', ev => { const m = ev.target.closest('[data-mode]'); if (m) { ev.preventDefault(); setMode(m.dataset.mode); } });

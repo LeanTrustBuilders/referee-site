@@ -112,6 +112,43 @@ class BuildTests(unittest.TestCase):
                 build(Options(dataset=V / "fixture-b", out=out, modules=["Fixture.Nope"]))
 
 
+class FullGraphTests(unittest.TestCase):
+    """The dependency graph's second view: `term` edges, proofs included. `Fixture.one`'s value has a
+    proof field, whose lemma `one_pos'` its `term` edges reach and its `meaning` edges do not."""
+
+    def test_the_full_graph(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "site"
+            read = lambda f: json.loads((out / "data" / f).read_text())
+
+            # a site of the whole library has the full graph, and no declaration is added for it
+            build(Options(dataset=V / "fixture-b", out=out, source=V / "source-b"))
+            site = read("site.json")
+            ids = {row[1]: row[0] for row in read("decls.json")}
+            self.assertIsNotNone(site["fullGraph"])
+            self.assertEqual(site["proofOnly"], [])
+            one, lemma = str(ids[F + "one"]), ids[F + "one_pos'"]
+            self.assertIn(lemma, read("graph-full.json")[one])
+            self.assertNotIn(lemma, read("graph.json")[one])
+
+            # a scoped site has it only when asked
+            build(Options(dataset=V / "fixture-b", out=out, only=[F + "one"]))
+            self.assertIsNone(read("site.json")["fullGraph"])
+            self.assertFalse((out / "data" / "graph-full.json").exists())
+            self.assertNotIn(F + "one_pos'", {row[1] for row in read("decls.json")})
+
+            # asked: closed under the full graph too; the lemma only the proof uses has a page, and is
+            # outside every count
+            build(Options(dataset=V / "fixture-b", out=out, only=[F + "one"], full_graph=True))
+            site = read("site.json")
+            ids = {row[1]: row[0] for row in read("decls.json")}
+            self.assertEqual(site["proofOnly"], [ids[F + "one_pos'"]])
+            self.assertEqual((site["scope"]["proofOnly"], site["counts"]["proofOnly"]), (1, 1))
+            self.assertEqual(site["counts"]["decls"], site["scope"]["size"])
+            self.assertEqual(site["counts"]["decls"], len(ids) - 1)
+            self.assertIn(ids[F + "one_pos'"], read("graph-full.json")[str(ids[F + "one"])])
+
+
 class TrustIndexTests(unittest.TestCase):
     """The index trust-web reads, written from a dataset and evidence."""
 
