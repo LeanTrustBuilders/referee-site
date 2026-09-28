@@ -60,13 +60,12 @@ function alsoIn(e) {
 }
 // What pins a definition down (evidence-core's pins): in the code, from reviewers, wanted.
 const PIN_KIND = {specifies: 'specification', example: 'example', nonexample: 'non-example', characterization: 'characterized by',
-  'unit test': 'unit test', test: 'test', 'met challenge': 'proposed test, met by', challenge: 'proposed test'};
+  test: 'test', 'met challenge': 'proposed test, met by', challenge: 'proposed test'};
 const PIN_RESULT = {passes: '<span class="chip good">passes</span>', sorry: '<span class="chip bad">has sorry</span>', missing: '<span class="chip bad">no longer in the library</span>'};
 function specsOf(e) {
   const pins = e?.pins || [];
   if (!pins.length) return e && !e.isProp ? `<div class="cp-specs"><div class="lbl">What pins it down</div><p class="muted small">Nothing yet: no specification, example or test.</p></div>` : '';
   const item = p => {
-    if (p.kind === 'unit test') return `<li>unit test ${PIN_RESULT[p.result] || ''} <code>${esc(p.statement)}</code></li>`;
     if (p.source === 'wanted') return `<li>${PIN_KIND[p.kind]}: ${md(p.comment, true)}${p.url ? ` <a class="small" href="${esc(p.url)}" target="_blank" rel="noopener">thread</a>` : ''}</li>`;
     return `<li>${esc(PIN_KIND[p.kind] || p.kind)} ${declLink(p.decl)}${p.result && p.source === 'reviewers' ? ` ${PIN_RESULT[p.result] || ''}` : ''}${p.mentions === false ? ' <span class="chip bad" title="Its statement does not mention this definition: it does not pin it down">not about it</span>' : ''}${p.comment && p.kind !== 'characterization' ? ` <span class="muted">— ${md(p.comment, true)}</span>` : ''}</li>`;
   };

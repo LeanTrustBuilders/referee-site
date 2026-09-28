@@ -376,7 +376,7 @@ class PinsTests(unittest.TestCase):
             site = json.loads((tmp / "site" / "data" / "site.json").read_text())
             entries = {e["name"]: e for p in (tmp / "site" / "data" / "m").glob("*.json") for e in json.loads(p.read_text())}
             kinds = [(p["source"], p["kind"]) for p in entries[F + "triple"]["pins"]]
-            self.assertIn(("code", "unit test"), kinds)
+            self.assertNotIn(("code", "unit test"), kinds)     # an example naming it is no test
             self.assertIn(("reviewers", "test"), kinds)
             self.assertIn(("wanted", "challenge"), kinds)
             [test] = [p for p in entries[F + "triple"]["pins"] if p["kind"] == "test"]
