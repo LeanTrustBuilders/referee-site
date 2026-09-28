@@ -68,6 +68,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="treat a package, and everything it depends on, as trusted (repeatable)")
     ti.add_argument("--decl-url", default="", help="a page for each project declaration, {name} standing for it")
     ti.add_argument("--start", default="", help="the declaration shown first")
+    ti.add_argument("--modules", action="append", default=[], metavar="PREFIX",
+                    help="keep the declarations of these modules and what trust-web reaches from them")
     args = parser.parse_args(argv)
     if args.cmd == "claim":
         from .claim_page import ClaimOptions, build_claim
@@ -78,7 +80,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "trust-index":
         from .trust_index import IndexOptions, build_index
         r = build_index(IndexOptions(dataset=args.dataset, out=args.out, name=args.name, evidence=args.evidence,
-                                     body=args.body, trust=args.trust, decl_url=args.decl_url, start=args.start))
+                                     body=args.body, trust=args.trust, decl_url=args.decl_url, start=args.start,
+                                     modules=args.modules))
         print(f"trust-index: {r['decls']} declarations, {r['stmt']} statement and {r['body']} body edges, "
               f"{r['trusted']} trusted, {r['characterized']} characterized, {r['reviewed']} reviewed → {r['out']}")
         return 0

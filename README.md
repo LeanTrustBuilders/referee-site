@@ -116,7 +116,8 @@ trust-site trust-index --dataset DATASET --out trust-web/public/index --name myl
 ```
 
 trust-web walks a declaration's definitional dependencies into the libraries underneath, so the
-dataset should be extracted with `--upstream-closure term`. `--body term` (the default) gives
+dataset should be extracted with `--upstream-closure term`. `--modules PREFIX` (repeatable) keeps the declarations
+of those modules and everything trust-web reaches from them, for a slice of a large library. `--body term` (the default) gives
 everything a definition's value mentions; `--body meaning`, only its data. An accepted review that
 still applies marks its declaration trusted; every reviewed declaration is listed with its status;
 `@[specifies]` and `@[characterization]` theorems characterize their definitions; `--trust` packages

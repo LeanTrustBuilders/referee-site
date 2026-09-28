@@ -230,6 +230,36 @@ class TrustIndexTests(unittest.TestCase):
             self.assertEqual(marks["trustedPackages"], ["lean4"])
             self.assertEqual((r["trusted"], r["reviewed"]), (1, 2))
 
+    def test_a_slice_of_modules(self):
+        """With `modules`: the modules' declarations and what trust-web reaches from them, renumbered."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            r = build_index(IndexOptions(dataset=V / "fixture-b-closure", out=tmp, name="fx", modules=["Fixture.Uses"]))
+            out = tmp / "fx"
+            decls = [json.loads(l) for l in (out / "decls.jsonl").read_text().splitlines()]
+            ids = {d["name"]: d["id"] for d in decls}
+            self.assertEqual([d["id"] for d in decls], list(range(len(decls))))
+            self.assertLess(len(decls), len(B.decls))
+            ds = Dataset.load(V / "fixture-b-closure")
+            uses = {d.name for d in ds.decls if d.module == "Fixture.Uses"}
+            self.assertTrue(uses and uses <= set(ids))
+            # what they reach, not what reaches them
+            self.assertIn(F + "double", ids)
+            self.assertNotIn(F + "IsSmall", ids)
+            pairs = lambda f: [tuple(p) for p in struct.iter_unpack("<ii", (out / f).read_bytes())]
+            self.assertTrue(all(s < len(decls) and t < len(decls) for s, t in pairs("stmt-edges.bin") + pairs("body-edges.bin")))
+            code_ids, refs = set(), set()
+            for f in (out / "code").glob("*.jsonl"):
+                for l in f.read_text().splitlines():
+                    row = json.loads(l)
+                    code_ids.add(row["id"])
+                    refs.update(x["name"] for x in row["signature"]["refs"] + ((row["value"] or {}).get("refs") or []))
+            self.assertEqual(code_ids, set(range(len(decls))))
+            self.assertTrue(refs <= set(ids))
+            meta = json.loads((out / "meta.json").read_text())
+            self.assertEqual((meta["declCount"], meta["source"]["modules"], r["decls"]), (len(decls), ["Fixture.Uses"], len(decls)))
+            self.assertIn(meta["start"], uses)
+
 
 class ClaimPageTests(unittest.TestCase):
     """One claim's page: the scoped site, and the evidence about what the claim rests on."""

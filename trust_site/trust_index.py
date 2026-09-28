@@ -25,6 +25,11 @@ with their `refs` turned into UTF-16 offsets, which is what a browser indexes st
 reference to a constant that is not a node (a projection such as `HAdd.hAdd`, a constructor) is
 pointed at the nearest enclosing name that is one (`HAdd`).
 
+**Scope.** With `modules`, the index keeps the declarations of those modules and everything
+trust-web can reach from them (statement edges, and body edges out of what is not a proof), so that
+a slice of a large library, such as Mathlib's probability theory, is an index of its own that walks
+as far as the whole would. Ids are renumbered; the marks keep what is in the index.
+
 **Marks.** A review (S3) whose verdict is `accepted` and which still applies (current or renamed)
 marks its declaration trusted. Every reviewed declaration is also listed as `protected`, with the
 review's status against this dataset (`current` is trust's `unchanged`, `stale` and
@@ -84,6 +89,8 @@ class IndexOptions:
     decl_url: str = ""
     #: The declaration shown first.
     start: str = ""
+    #: Module prefixes: keep their declarations and what trust-web reaches from them (all if empty).
+    modules: list[str] = field(default_factory=list)
 
 
 def utf16_offsets(text: str) -> list[int]:
@@ -122,10 +129,11 @@ def write_pairs(path: Path, adj: dict[int, list[int]]) -> int:
 
 
 class Renderer:
-    """Code blocks with their references, from the dataset's texts and refs."""
+    """Code blocks with their references, from the dataset's texts and refs, pointing only at the
+    declarations of the index (`names`)."""
 
-    def __init__(self, ds: Dataset):
-        self.nodes = ds.by_name
+    def __init__(self, ds: Dataset, names: set[str] | None = None):
+        self.nodes = names if names is not None else ds.by_name
         self._target: dict[str, str | None] = {}
 
     def target(self, const: str) -> str | None:
@@ -158,7 +166,7 @@ class Renderer:
 
 
 def code_row(ds: Dataset, r: Renderer, decl, sig: dict | None, stmt: dict | None,
-             doc: str | None) -> dict:
+             doc: str | None, id: int | None = None) -> dict:
     keyword = KEYWORD.get(decl.kind, "")
     if sig:
         signature = r.block([(keyword, []), (sig["text"], sig.get("refs", []))])
@@ -178,7 +186,7 @@ def code_row(ds: Dataset, r: Renderer, decl, sig: dict | None, stmt: dict | None
             for k, c in enumerate(stmt["constructors"]):
                 parts += [(("\n" if k else "") + f"  | {c['name']} : ", []), (c["type"], c.get("typeRefs", []))]
             value = r.block(parts)
-    return {"id": decl.id, "signature": signature, "value": value, "doc": doc}
+    return {"id": decl.id if id is None else id, "signature": signature, "value": value, "doc": doc}
 
 
 def characterizations(ds: Dataset) -> list[dict]:
@@ -230,6 +238,25 @@ def marks(ds: Dataset, opt: IndexOptions, trusted_packages: list[str]) -> dict:
             "trustedPackages": trusted_packages}
 
 
+def in_modules(module: str, prefixes: list[str]) -> bool:
+    return any(module == p or module.startswith(p + ".") for p in prefixes)
+
+
+def scope_of(ds: Dataset, prefixes: list[str], stmt: dict[int, list[int]],
+             body: dict[int, list[int]]) -> list[int]:
+    """The ids of the declarations of the modules under `prefixes`, and of everything trust-web
+    reaches from them: statement edges, and body edges out of what is not a proof."""
+    seen = {d.id for d in ds.decls if in_modules(d.module, prefixes)}
+    todo = list(seen)
+    while todo:
+        x = todo.pop()
+        for t in list(stmt.get(x, ())) + list(body.get(x, ())):
+            if t not in seen:
+                seen.add(t)
+                todo.append(t)
+    return sorted(seen)
+
+
 def build_index(opt: IndexOptions) -> dict:
     ds = Dataset.load(opt.dataset)
     lib = ds.meta.get("library", {})
@@ -238,22 +265,6 @@ def build_index(opt: IndexOptions) -> dict:
     if out.exists():
         shutil.rmtree(out)
     (out / "code").mkdir(parents=True)
-
-    axioms = ds.facet("axioms") if "axioms" in ds.facet_names() else {}
-    hashes = any(d.content for d in ds.decls)
-    lines = []
-    for d in ds.decls:
-        row = {"id": d.id, "name": d.name, "module": d.module, "package": d.package,
-               "kind": KIND.get(d.kind, d.kind), "isProp": d.is_prop, "isData": not d.is_prop}
-        if hashes and d.content:
-            row["hash"] = d.content
-        ax = (axioms.get(d.name) or [None])[0]
-        if ax:
-            row["axioms"] = ax.get("axioms", [])
-            row["usesSorry"] = bool(ax.get("sorry"))
-        lines.append(json.dumps(row, ensure_ascii=False, separators=(",", ":")))
-    decl_text = "\n".join(lines) + "\n"
-    (out / "decls.jsonl").write_text(decl_text, encoding="utf-8")
 
     stmt = edge_map(ds, ["statement", "upstream-statement"])
     body_all = edge_map(ds, [opt.body, f"upstream-{opt.body}"])
@@ -265,43 +276,74 @@ def build_index(opt: IndexOptions) -> dict:
         kept = [t for t in ts if t not in in_stmt]
         if kept:
             body[s] = kept
-    stmt_count = write_pairs(out / "stmt-edges.bin", stmt)
-    body_count = write_pairs(out / "body-edges.bin", body)
+    # The declarations of the index, and their ids in it.
+    keep = scope_of(ds, opt.modules, stmt, body) if opt.modules else [d.id for d in ds.decls]
+    new = {old: i for i, old in enumerate(keep)}
+    decls = [ds.decls[i] for i in keep]
+    names = {d.name for d in decls}
+    remap = lambda adj: {new[s]: [new[t] for t in ts if t in new] for s, ts in adj.items() if s in new}
 
-    names = ds.facet_names()
-    sigs = ds.facet("signature") if "signature" in names else {}
-    stmts = ds.facet("statement") if "statement" in names else {}
-    docs = ds.facet("docstring") if "docstring" in names else {}
-    r = Renderer(ds)
-    for shard in range(0, len(ds.decls), CODE_SHARD_SIZE):
+    axioms = ds.facet("axioms") if "axioms" in ds.facet_names() else {}
+    hashes = any(d.content for d in decls)
+    lines = []
+    for d in decls:
+        row = {"id": new[d.id], "name": d.name, "module": d.module, "package": d.package,
+               "kind": KIND.get(d.kind, d.kind), "isProp": d.is_prop, "isData": not d.is_prop}
+        if hashes and d.content:
+            row["hash"] = d.content
+        ax = (axioms.get(d.name) or [None])[0]
+        if ax:
+            row["axioms"] = ax.get("axioms", [])
+            row["usesSorry"] = bool(ax.get("sorry"))
+        lines.append(json.dumps(row, ensure_ascii=False, separators=(",", ":")))
+    decl_text = "\n".join(lines) + "\n"
+    (out / "decls.jsonl").write_text(decl_text, encoding="utf-8")
+
+    stmt_count = write_pairs(out / "stmt-edges.bin", remap(stmt))
+    body_count = write_pairs(out / "body-edges.bin", remap(body))
+
+    facets = ds.facet_names()
+    sigs = ds.facet("signature") if "signature" in facets else {}
+    stmts = ds.facet("statement") if "statement" in facets else {}
+    docs = ds.facet("docstring") if "docstring" in facets else {}
+    r = Renderer(ds, names)
+    for shard in range(0, len(decls), CODE_SHARD_SIZE):
         rows = []
-        for d in ds.decls[shard:shard + CODE_SHARD_SIZE]:
+        for d in decls[shard:shard + CODE_SHARD_SIZE]:
             first = lambda f: (f.get(d.name) or [None])[0]
             doc = first(docs)
-            rows.append(json.dumps(code_row(ds, r, d, first(sigs), first(stmts), doc and doc.get("text")),
-                                   ensure_ascii=False, separators=(",", ":")))
+            rows.append(json.dumps(code_row(ds, r, d, first(sigs), first(stmts), doc and doc.get("text"),
+                                            new[d.id]), ensure_ascii=False, separators=(",", ":")))
         (out / "code" / f"{shard // CODE_SHARD_SIZE}.jsonl").write_text("\n".join(rows) + "\n", encoding="utf-8")
 
     packages = ds.packages
     trusted_packages = sorted(analysis.trusted_packages(packages, opt.trust)) if opt.trust else []
     m = marks(ds, opt, trusted_packages)
+    if opt.modules:
+        m["trusted"] = [x for x in m["trusted"] if x["name"] in names]
+        m["protected"] = [x for x in m["protected"] if x["name"] in names]
+        m["characterizations"] = [{**c, "theorems": [t for t in c["theorems"] if t in names]}
+                                  for c in m["characterizations"] if c["definition"] in names]
+        m["characterizations"] = [c for c in m["characterizations"] if c["theorems"]]
     (out / "marks.json").write_text(json.dumps(m, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
 
     closure = ds.meta.get("upstreamClosure")
-    start = opt.start or next((d.name for d in ds.decls if d.is_project), "")
+    start = opt.start or next((d.name for d in decls if d.is_project and
+                               (not opt.modules or in_modules(d.module, opt.modules))), "")
     meta = {
         "schemaVersion": 1, "repo": name, "rev": ds.commit, "toolchain": ds.toolchain.split(":v")[-1],
         "moduleCount": sum(p.get("modules", 0) for p in packages) or len(ds.modules),
-        "declCount": len(ds.decls), "stmtEdgeCount": stmt_count, "bodyEdgeCount": body_count,
+        "declCount": len(decls), "stmtEdgeCount": stmt_count, "bodyEdgeCount": body_count,
         "declBytes": len(decl_text.encode("utf-8")), "hasBodyEdges": True, "hasProofEdges": False,
         "hasCode": True, "hasHashes": hashes, "hasher": ds.content_hasher if hashes else "",
         "codeShardSize": CODE_SHARD_SIZE, "edgeFormat": "i32le",
         # What the fork reads besides trust's own fields.
         "start": start, "declUrl": opt.decl_url,
         "source": {"dataset": ds.meta.get("spec"), "producer": ds.producer(), "library": lib.get("repo", ""),
-                   "package": lib.get("package", ""), "body": opt.body, "upstreamClosure": closure},
+                   "package": lib.get("package", ""), "body": opt.body, "upstreamClosure": closure,
+                   "modules": opt.modules},
     }
     (out / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-    return {"out": out, "decls": len(ds.decls), "stmt": stmt_count, "body": body_count,
+    return {"out": out, "decls": len(decls), "stmt": stmt_count, "body": body_count,
             "trusted": len(m["trusted"]), "characterized": len(m["characterizations"]),
             "reviewed": len(m["protected"]), "closure": closure}
