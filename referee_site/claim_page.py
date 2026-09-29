@@ -124,10 +124,11 @@ def build_claim(opt: ClaimOptions) -> dict:
         "packages": sorted({d.package for d in closure if not d.is_project}),
         "records": rows, "orphans": len(ev.orphans),
         "policy": {"switches": list(POLICY_SWITCHES), "states": states, "why": why},
-        "imports": [{"repo": i["repo"], "commit": i["commit"], "records": i["records"]} for i in imported.read] if imported else [],
+        "imports": [{"repo": i["repo"], "name": i["name"], "commit": i["commit"], "records": i["records"]}
+                    for i in imported.read] if imported else [],
         # Whether Lean's kernel accepted each declaration of the claim's closure with only its closure.
         "kernel": {n: kernel_summary(ds, n, order).as_json() for n in kernel_notions(ds)},
-        "store": {"records": len(records), "maintainers": config.get("maintainers", [])} if store else None,
+        "store": {"name": store.name, "records": len(records), "maintainers": config.get("maintainers", [])} if store else None,
         "agentCommand": f"evidence-store submit --repo {repo} --decl NAME --verdict accept "
                         f"--rationale \"…\" --agent \"TOOL, MODEL\"" if store and repo else "",
     }

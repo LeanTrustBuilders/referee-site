@@ -122,7 +122,7 @@ function kernelNote() {
   if (k.counts.unchecked || k.counts.skipped) return `<p class="muted small">Lean's kernel checked ${k.ok} of the ${k.declarations} declarations listed here; the others were not checked.</p>`;
   return `<p class="muted small">✓ Lean's kernel checked each of these ${k.declarations} declarations with nothing but what this page lists: the claim rests on nothing else.</p>`;
 }
-const policyPanel = () => RV.policyPanel(policy, true, E.imports || []);
+const policyPanel = () => RV.policyPanel(policy, true, E.imports || [], (E.store || {}).name || '');
 function reviewNext() {
   const c = coverage();
   const rank = [...c.problem.map(n => [n, 'decide the open problem']), ...c.disputed.map(n => [n, 'reviewers disagree']),

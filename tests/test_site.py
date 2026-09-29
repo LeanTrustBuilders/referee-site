@@ -270,7 +270,7 @@ class ClaimPageTests(unittest.TestCase):
         from referee_site.claim_page import ClaimOptions, build_claim
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
-            store = Store.init(tmp / "evidence", {**default_config("owner/lib", "Fixture"), "claims": [F + "triple_pos"]})
+            store = Store.init(tmp / "evidence", {**default_config("owner/lib", "Fixture", "Fixture"), "claims": [F + "triple_pos"]})
             person = {"kind": "person", "identity": {"kind": "github", "id": "alice"}}
             agent = {"kind": "agent", "identity": {"kind": "github", "id": "alice"},
                      "agent": {"tool": "Claude Code", "model": "claude-opus-5-5"}}
@@ -338,7 +338,7 @@ class KernelCheckTests(unittest.TestCase):
             entries = {e["name"]: e for p in (tmp / "site" / "data" / "m").glob("*.json") for e in json.loads(p.read_text())}
             self.assertEqual(entries[F + "double"]["kernel"], {"meaning": {"kernel": "ok"}})
             self.assertEqual(entries[F + "triple"]["kernel"]["meaning"]["missing"], ["Fixture.helper"])
-            Store.init(tmp / "evidence", default_config("owner/lib", "Fixture"))
+            Store.init(tmp / "evidence", default_config("owner/lib", "Fixture", "Fixture"))
             build_claim(ClaimOptions(dataset=ds, out=tmp / "page", store=tmp / "evidence", source=V / "source-b"))
             k = json.loads((tmp / "page" / "data" / "evidence.json").read_text())["kernel"]["meaning"]
             self.assertIn(F + "triple", k["missing"])                 # triple_pos rests on triple
@@ -365,7 +365,7 @@ class PinsTests(unittest.TestCase):
             (ds_dir / "facets" / "examples.jsonl").write_text(json.dumps({"decl": F + "triple", "examples": [
                 {"path": "Fixture/Uses.lean", "line": 3, "end": 3, "statement": "example : triple 1 = 3", "sorry": False}]}) + "\n")
             ds = Dataset.load(ds_dir)
-            store = Store.init(tmp / "evidence", default_config("owner/lib", "Fixture"))
+            store = Store.init(tmp / "evidence", default_config("owner/lib", "Fixture", "Fixture"))
             alice = {"kind": "person", "identity": {"kind": "github", "id": "alice"}}
             subject = lambda n: evrec.subject_from_decl(ds.by_name[F + n], ds)
             store.add([{"schema": evrec.SCHEMA, "kind": "test", "subject": subject("triple"), "test": {"name": F + "triple_pos"},
@@ -425,7 +425,7 @@ class CommunityTests(unittest.TestCase):
         from evidence_core.store import Store, default_config
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
-            store = Store.init(tmp / "evidence", {**default_config("owner/lib", "Fixture"), "claims": [F + "triple_pos"]})
+            store = Store.init(tmp / "evidence", {**default_config("owner/lib", "Fixture", "Fixture"), "claims": [F + "triple_pos"]})
             agent = {"kind": "agent", "identity": {"kind": "github", "id": "alice"}, "agent": {"tool": "Claude Code"}}
             review = lambda n, **x: {"schema": evrec.SCHEMA, "kind": "review", "subject": evrec.subject_from_decl(B.by_name[F + n], B),
                                       "by": agent, "at": "2026-09-27T10:00:00Z", "origin": {"kind": "issue", "ref": "owner/lib#1"}, **x}
@@ -464,9 +464,9 @@ class CommunityTests(unittest.TestCase):
         from referee_site.claim_page import ClaimOptions, build_claim
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
-            Store.init(tmp / "evidence", {**default_config("owner/lib", "Fixture"), "claims": [F + "triple_pos"],
+            Store.init(tmp / "evidence", {**default_config("owner/lib", "Fixture", "Fixture"), "claims": [F + "triple_pos"],
                                           "imports": [{"repo": "other/lib"}]})
-            theirs = Store.init(tmp / "cache" / "other" / "lib" / "evidence", default_config("other/lib", "Other"))
+            theirs = Store.init(tmp / "cache" / "other" / "lib" / "evidence", default_config("other/lib", "Other", "Other"))
             bob = {"kind": "person", "identity": {"kind": "github", "id": "bob"}}
             [acc] = theirs.add([{"schema": evrec.SCHEMA, "kind": "review", "verdict": "accept", "by": bob,
                                  "subject": evrec.subject_from_decl(B.by_name[F + "triple_pos"], B), "at": "2026-09-29T10:00:00Z"}])
@@ -474,16 +474,17 @@ class CommunityTests(unittest.TestCase):
             build(Options(dataset=V / "fixture-b", out=tmp / "site", source=V / "source-b", evidence=tmp / "evidence",
                           imports=tmp / "cache"))
             site = json.loads((tmp / "site" / "data" / "site.json").read_text())
-            self.assertEqual(site["imports"], [{"repo": "other/lib", "commit": "abc", "records": 1}])
+            self.assertEqual((site["storeName"], site["imports"]),
+                             ("Fixture", [{"repo": "other/lib", "name": "Other", "commit": "abc", "records": 1}]))
             rows = {r[1]: r for r in json.loads((tmp / "site" / "data" / "decls.json").read_text())}
             # Counted under the default policy (index 7, `00111`), not with imported reviews off (`00110`).
             self.assertEqual((rows[F + "triple_pos"][14][7], rows[F + "triple_pos"][14][6]), ("c", "u"))
             [r] = [r for r in json.loads((tmp / "site" / "data" / "evidence.json").read_text())["records"] if r["id"] == acc["id"]]
-            self.assertEqual((r["source"], r["actions"]), ("other/lib", []))
+            self.assertEqual((r["source"], r["actions"]), ({"repo": "other/lib", "name": "Other"}, []))
             build_claim(ClaimOptions(dataset=V / "fixture-b", out=tmp / "claim", store=tmp / "evidence",
                                      imports=tmp / "cache", source=V / "source-b"))
             data = json.loads((tmp / "claim" / "data" / "evidence.json").read_text())
-            self.assertEqual(data["imports"][0]["repo"], "other/lib")
+            self.assertEqual((data["store"]["name"], data["imports"][0]["name"]), ("Fixture", "Other"))
             self.assertEqual(data["policy"]["states"]["00111"][F + "triple_pos"], "covered")
             self.assertEqual(data["policy"]["why"]["00110"][F + "triple_pos"], "imported")
 

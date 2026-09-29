@@ -95,9 +95,10 @@ coverage under it, what to review next, the reviewers and the activity.
 records"): with `--imports DIR`, where `evidence-store fetch-imports` fetched them, the site, the
 claim page and the trust index also show those stores' records about the declarations here. A review
 of a Mathlib definition made in another library's store then appears on this library's Mathlib
-declarations. Each such record says which store it comes from and has no actions (its state is its
-store's to set), the reader's policy has one more switch (count reviews from imported stores), and
-the Community page names each imported store and the commit it was read at.
+declarations. Each such record says which store it comes from, by the name its `store.json` gives,
+and has no actions (its state is its store's to set), the reader's policy has one more switch (count
+reviews from imported stores), and the Community page names each imported store and the commit it
+was read at.
 
 ## One claim's page
 

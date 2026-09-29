@@ -790,7 +790,7 @@ async function renderCommunity() {
   let h = pagerFor('#/community') + `<h1>The community's reviews</h1>` + scopeNotice() +
     `<p>People and AI agents review this library's declarations in its evidence store${S.issuesRepo ? `, <a href="https://github.com/${esc(S.issuesRepo)}">${esc(S.issuesRepo)}</a>` : ''}: ${plural(S.community.records, 'record')} so far, each under a GitHub account. Where each declaration stands, and what counts as reviewed, depends on whose reviews you count.</p>` +
     `<div class="notice">You are ${community() ? "reading the community's reviews: every badge and count on this site is theirs, under your policy" : 'reading your own reviews'}. <button class="btn" data-mode="${community() ? 'mine' : 'community'}">${community() ? 'Show my reviews instead' : "Show the community's instead"}</button></div>`;
-  h += RV.policyPanel(policy, false, S.imports || []);
+  h += RV.policyPanel(policy, false, S.imports || [], S.storeName || '');
   const claims = S.claims.claims.filter(c => c.found !== false && byName.has(c.decl));
   if (claims.length) {
     h += `<section id="claims-coverage"><h2>The claims</h2><ul class="cov">${claims.map(c => {

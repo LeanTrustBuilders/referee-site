@@ -47,11 +47,12 @@ const RV = (() => {
   const WHY = {agents: 'reviewed only by AI agents, which your policy does not count',
     authors: 'reviewed only by its authors, which your policy does not count',
     imported: 'reviewed only in other stores, which your policy does not count', policy: 'reviewed, but your policy counts none of its reviews'};
-  // `imports`: the stores whose records the page shows beside its own store's, as read ({repo, commit}).
-  function policyPanel(p, withUpstream = false, imports = []) {
+  // `imports`: the stores whose records the page shows beside those of its store, `storeName`, as
+  // read ({repo, name, commit}).
+  function policyPanel(p, withUpstream = false, imports = [], storeName = '') {
     const shown = SWITCHES.filter(([k]) => k !== 'imported' || imports.length);
     const all = withUpstream ? [...shown, ['upstream', 'require the upstream declarations to be reviewed here too']] : shown;
-    const from = imports.length ? `<p class="muted small">Also shown: the records of ${imports.map(i => `<a href="https://github.com/${esc(i.repo)}">${esc(i.repo)}</a>${i.commit ? ` at <code>${esc(i.commit.slice(0, 12))}</code>` : ''}`).join(', ')} about the declarations here, marked with the store they come from.</p>` : '';
+    const from = imports.length ? `<p class="muted small">Beside the records of the ${esc(storeName)} store: those of ${imports.map(i => `the <a href="https://github.com/${esc(i.repo)}">${esc(i.name)}</a> store${i.commit ? ` at <code>${esc(i.commit.slice(0, 12))}</code>` : ''}`).join(', ')} about the same declarations, marked with the store they come from.</p>` : '';
     return `<section class="cp-policy" id="policy"><h2>Whose reviews count</h2>
       <p class="muted">Reviews are data; which ones count is your choice. Your choice is kept in this browser.</p>${from}
       <div class="toggles">${all.map(([k, t]) => `<label><input type="checkbox" data-p="${k}"${p[k] ? ' checked' : ''}> ${k === 'upstream' ? '' : 'count '}${esc(t)}</label>`).join('')}</div>
@@ -109,7 +110,7 @@ const RV = (() => {
     const head = r.verdict === 'accept' ? '<span class="v accept">Accepted</span>'
       : r.verdict === 'problem' ? `<span class="v problem">Problem</span> <span class="muted">${esc(problemOf(r.rubric, r.category))}</span>`
       : '<span class="v question">Question</span>';
-    const from = r.source ? ` <a class="chip plain" href="https://github.com/${esc(r.source)}" title="A record of another store, which sets its state">from ${esc(r.source)}</a>` : '';
+    const from = r.source ? ` <a class="chip plain" href="https://github.com/${esc(r.source.repo)}" title="A record of the ${esc(r.source.name)} store, which sets its state">from ${esc(r.source.name)}</a>` : '';
     let h = `<div class="thread ${r.verdict}${inForce(r) ? '' : ' faded'}" id="r-${r.id}"><div class="t-head">${head} <span class="muted">by</span> <span class="by">${who(r.by)}</span> · ${when(r.at)}${from} ${statusChip(r)} ${stateChip(r)}</div>`;
     let body = '';
     if (r.reference) body += `<div class="t-ref"><span class="lbl">Compared with</span> ${r.reference.url ? `<a href="${esc(r.reference.url)}">${esc(r.reference.text)}</a>` : esc(r.reference.text)}</div>`;

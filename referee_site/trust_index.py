@@ -234,7 +234,7 @@ def marks(ds: Dataset, opt: IndexOptions, trusted_packages: list[str]) -> dict:
                 if r.get("text"):
                     note += f": {r['text']}"
                 if r.get("id") in ev.source:
-                    note += f" (from {ev.source[r['id']]})"
+                    note += f" (from the {ev.source[r['id']]['name']} store)"
                 if s.applies and r.get("verdict") == "accept":
                     trusted[name] = {"name": name, "commit": commit, "note": note}
                 entry = {"name": name, "note": note, "status": PROTECTION.get(s.state, "unrecorded")}
