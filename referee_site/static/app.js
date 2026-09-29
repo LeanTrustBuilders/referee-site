@@ -1,4 +1,4 @@
-/* trust-site: the pages of a Lean library, rendered from the JSON the builder writes.
+/* referee-site: the pages of a Lean library, rendered from the JSON the builder writes.
    Routes: #/  #/claims  #/theorems  #/specifications  #/browse  #/sorries  #/changes
            #/c/<chapter>  #/m/<module index>  #/d/<declaration name>                       */
 'use strict';
@@ -21,7 +21,7 @@ const scoped = () => S.scope.mode !== 'full';
    what it was compared with, the axes checked, caveats), which can be exported as S3
    records or submitted to the store. The community's: the store's reviews, people's and AI agents',
    read by evidence-core, and where each declaration stands under the reader's policy. */
-const MODE_KEY = () => `trust-site:mode:${S.repo}:${S.root}`;
+const MODE_KEY = () => `referee-site:mode:${S.repo}:${S.root}`;
 let mode = 'mine', policy = {...RV.DEFAULT_POLICY};
 const community = () => mode === 'community' && !!S.community;
 function loadMode() {
@@ -41,7 +41,7 @@ function paintMode() { document.querySelectorAll('#mode [data-mode]').forEach(b 
 const stateOf = row => RV.LETTER[(row[R.STATES] || '')[RV.policyIndex(policy)]] || 'unreviewed';
 
 /* ---------- my review: local, keyed by meaning hash ---------- */
-const AUDIT_KEY = () => `trust-site:${S.repo}:${S.root}`;
+const AUDIT_KEY = () => `referee-site:${S.repo}:${S.root}`;
 let audit = {decls: {}, exported: null};
 const OLD_VERDICT = {accepted: 'accept', query: 'question'};
 function loadAudit() {
@@ -63,7 +63,7 @@ function setReview(name, fields) {
   if (!next.verdict && !next.note && !next.reference && !next.caveats && !Object.keys(next.checked || {}).length) delete audit.decls[name];
   else audit.decls[name] = {...next, meaning: row ? row[R.MEANING] : cur.meaning, at: new Date().toISOString()};
   saveAudit(); coverageCache.clear();
-  document.dispatchEvent(new CustomEvent('trust-site:audit', {detail: name}));
+  document.dispatchEvent(new CustomEvent('referee-site:audit', {detail: name}));
 }
 const setVerdict = (name, verdict, note) => setReview(name, note === undefined ? {verdict} : {verdict, note});
 function accepted(id) {
@@ -125,10 +125,10 @@ function verdictBadge(name) {
 // Records are never anonymous (S3): an export names the reader's GitHub account, which a store then
 // checks against whoever submits it (a pull request's author).
 function githubLogin() {
-  let login = ''; try { login = localStorage.getItem('trust-site:github') || ''; } catch (e) { }
+  let login = ''; try { login = localStorage.getItem('referee-site:github') || ''; } catch (e) { }
   login = (prompt('Your GitHub account, which the records will name (a store only takes records from their author):', login) || '').trim().replace(/^@/, '');
   if (!login) return null;
-  try { localStorage.setItem('trust-site:github', login); } catch (e) { }
+  try { localStorage.setItem('referee-site:github', login); } catch (e) { }
   return login;
 }
 // My review as an S3 record (evidence-core's shape): what the store's forms would have recorded.
@@ -632,7 +632,7 @@ async function renderDecl(name) {
     const pkgs = new Map(S.packages.map(p => [p.name, p]));
     const direct = (e.directExternal || []).map(n => [n, (e.external.find(x => x[0] === n) || [n, '', ''])]).filter(([, x]) => x[1] && !pkgs.get(x[1])?.toolchain);
     const audited = direct.filter(([, x]) => pkgs.get(x[1])?.trusted).length;
-    let showAudited = false; try { showAudited = localStorage.getItem('trust-site:graph-upstream') === '1'; } catch (err) { }
+    let showAudited = false; try { showAudited = localStorage.getItem('referee-site:graph-upstream') === '1'; } catch (err) { }
     let force = false;
     // The full view: what it adds, and that nothing is counted over it.
     const fullNote = ids => {
@@ -672,7 +672,7 @@ async function renderDecl(name) {
       graph($('#dg'), {nodes: ns, edges: es, unit: 'declaration', ...AUDIT_GRAPH,
         card: nodeCard, control: n => n.id >= 0 ? cardControl(n.id) : '',
         extra: !subs.size && !full && audited ? {label: showAudited ? 'Hide audited upstream' : `Show audited upstream (${audited})`, pressed: showAudited,
-          onClick: () => { showAudited = !showAudited; try { localStorage.setItem('trust-site:graph-upstream', showAudited ? '1' : '0'); } catch (err) { } draw(); }} : null,
+          onClick: () => { showAudited = !showAudited; try { localStorage.setItem('referee-site:graph-upstream', showAudited ? '1' : '0'); } catch (err) { } draw(); }} : null,
         caption: `${plural(ids.length, 'declaration')}, each below what it rests on. ${full ? 'A theorem points to what its proof uses too; faded, what only proofs reach. ' : subs.size ? 'A definition taken from its characterization points to it. ' : ''}Click a node to read it here.`});
     };
     draw();
@@ -902,9 +902,9 @@ function frame() {
   document.title = S.title; $('#brand').textContent = S.title;
   $('#nav-links').innerHTML = pagesShown().map(([k, t]) => `<a href="#/${k}" data-k="${k}">${t}</a>`).join('');
   $('#toc').innerHTML = S.chapters.map(c => `<li><a href="#/c/${c.id}" data-c="${c.id}">${esc(c.title)}</a></li>`).join('');
-  const themes = ['auto', 'light', 'dark']; let t = localStorage.getItem('trust-site:theme') || 'auto';
+  const themes = ['auto', 'light', 'dark']; let t = localStorage.getItem('referee-site:theme') || 'auto';
   const applyTheme = () => { if (t === 'auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t; $('#theme').textContent = `Theme: ${t}`; };
-  applyTheme(); $('#theme').onclick = () => { t = themes[(themes.indexOf(t) + 1) % 3]; try { localStorage.setItem('trust-site:theme', t); } catch (e) { } applyTheme(); };
+  applyTheme(); $('#theme').onclick = () => { t = themes[(themes.indexOf(t) + 1) % 3]; try { localStorage.setItem('referee-site:theme', t); } catch (e) { } applyTheme(); };
   $('#menu').onclick = () => $('#side').classList.toggle('open');
   if (S.community) {
     const box = document.createElement('div'); box.id = 'mode'; box.className = 'mode-switch';
@@ -935,7 +935,7 @@ async function start() {
   S.hasSpecs = Object.values(S.pins || {}).some(p => p.pinned);
   number(); loadAudit(); loadMode(); frame(); setupSearch(); setupTips();
   document.addEventListener('click', ev => { const m = ev.target.closest('[data-mode]'); if (m) { ev.preventDefault(); setMode(m.dataset.mode); } });
-  document.addEventListener('click', ev => { if (ev.target.closest('.expand-btn')) { expanded = !expanded; try { localStorage.setItem('trust-site:expanded', expanded ? '1' : '0'); } catch (e) { } applyExpanded(); } });
+  document.addEventListener('click', ev => { if (ev.target.closest('.expand-btn')) { expanded = !expanded; try { localStorage.setItem('referee-site:expanded', expanded ? '1' : '0'); } catch (e) { } applyExpanded(); } });
   window.addEventListener('hashchange', route); route();
 }
 document.addEventListener('DOMContentLoaded', () => start().catch(e => { $('#main').innerHTML = `<h1>Could not load the site</h1><pre>${esc(e.stack || e)}</pre>`; }));

@@ -3,11 +3,11 @@
 A static site for reading a Lean library as a referee does: what each result says, what it rests on,
 what the project claims, what changed, and who reviewed what. It is built from a library's dataset
 (S2, written by the [extractor](https://github.com/LeanTrustBuilders/extractor)) and, optionally, its
-evidence store (S3); it needs Python, not Lean. The package and command are `trust-site`.
+evidence store (S3); it needs Python, not Lean.
 
 ```bash
 pip install git+https://github.com/LeanTrustBuilders/referee-site
-trust-site build --dataset DATASET --source CHECKOUT --out site/ --trust mathlib
+referee-site build --dataset DATASET --source CHECKOUT --out site/ --trust mathlib
 ```
 
 `CHECKOUT` is the library at the dataset's commit, read for source text, the README,
@@ -102,7 +102,7 @@ the Community page names each imported store and the commit it was read at.
 ## One claim's page
 
 ```bash
-trust-site claim --dataset DATASET --store evidence/ --source CHECKOUT --out page/ [--at OLDER_DATASET …]
+referee-site claim --dataset DATASET --store evidence/ --source CHECKOUT --out page/ [--at OLDER_DATASET …]
 ```
 
 A single page for one claim: the claim and what its statement rests on, in reading order, with
@@ -115,11 +115,11 @@ the claim, is kept beside it as `site.html`.
 
 ## The trust index
 
-`trust-site trust-index` writes the index that [trust-web](https://github.com/LeanTrustBuilders/trust-web)
+`referee-site trust-index` writes the index that [trust-web](https://github.com/LeanTrustBuilders/trust-web)
 reads, from the same dataset and evidence:
 
 ```bash
-trust-site trust-index --dataset DATASET --out trust-web/public/index --name mylib \
+referee-site trust-index --dataset DATASET --out trust-web/public/index --name mylib \
   --evidence evidence.jsonl --trust mathlib --decl-url "../site/#/d/{name}"
 ```
 

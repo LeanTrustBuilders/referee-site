@@ -1,4 +1,4 @@
-/* trust-site: reviews as the pages show them, shared by the site (index.html) and a claim's page
+/* referee-site: reviews as the pages show them, shared by the site (index.html) and a claim's page
    (claim.html). What a review is, and where each declaration stands under a reader's policy, is
    evidence-core's; this only lays records out. Functions that link or open forms take a context:
    {repo, commit, forms, recs (record id → record), nameLink (a declaration's link), isProp(name)}. */
@@ -37,7 +37,7 @@ const RV = (() => {
   const DEFAULT_POLICY = {agents: false, staleUnderneath: false, caveats: true, authors: true, imported: true, upstream: false};
   const policyKey = p => SWITCHES.map(([k]) => p[k] ? '1' : '0').join('');
   const policyIndex = p => parseInt(policyKey(p), 2);
-  const storeKey = repo => `trust-site:claim-policy:${repo}`;
+  const storeKey = repo => `referee-site:claim-policy:${repo}`;
   function loadPolicy(repo) { try { return {...DEFAULT_POLICY, ...JSON.parse(localStorage.getItem(storeKey(repo)) || '{}')}; } catch (e) { return {...DEFAULT_POLICY}; } }
   function savePolicy(repo, p) { try { localStorage.setItem(storeKey(repo), JSON.stringify(p)); } catch (e) { } }
   // Where a declaration stands under a policy, as the site's rows carry it (one letter per policy).

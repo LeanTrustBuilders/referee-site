@@ -1,6 +1,6 @@
-"""trust-site build --dataset DIR --out DIR [--source DIR] [options]
-trust-site trust-index --dataset DIR --out DIR [options]
-trust-site claim --dataset DIR --store evidence/ --out DIR [options]
+"""referee-site build --dataset DIR --out DIR [--source DIR] [options]
+referee-site trust-index --dataset DIR --out DIR [options]
+referee-site claim --dataset DIR --store evidence/ --out DIR [options]
 
 Builds the site of a Lean library from its dataset (S2, written by trust-extract), published
 evidence (S3), and a checkout of its source (for code, proofs, README and claims files).
@@ -15,7 +15,7 @@ from .build import Options, build
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="trust-site", description=__doc__,
+    parser = argparse.ArgumentParser(prog="referee-site", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
     b = sub.add_parser("build", help="build the site")

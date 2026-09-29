@@ -1,4 +1,4 @@
-/* trust-site: one claim, and every review of what it rests on.
+/* referee-site: one claim, and every review of what it rests on.
    Data: data/site.json, data/decls.json and data/m/*.json (the site scoped to the claim), and
    data/evidence.json (the evidence store's records about those declarations, with their status).
    Coverage is computed here, under the reader's policy: whose reviews count is the reader's choice. */
@@ -184,10 +184,10 @@ async function start() {
   E.records.forEach(r => recs.set(r.id, r));
   await Promise.all(E.order.map(async n => { const e = await declData(n); if (e) entries.set(n, e); }));
   loadPolicy(); setupTips();
-  const themes = ['auto', 'light', 'dark']; let t = localStorage.getItem('trust-site:theme') || 'auto';
+  const themes = ['auto', 'light', 'dark']; let t = localStorage.getItem('referee-site:theme') || 'auto';
   const applyTheme = () => { if (t === 'auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t; $('#theme').textContent = `Theme: ${t}`; };
-  applyTheme(); $('#theme').onclick = () => { t = themes[(themes.indexOf(t) + 1) % 3]; try { localStorage.setItem('trust-site:theme', t); } catch (e) { } applyTheme(); };
-  document.addEventListener('click', ev => { if (ev.target.closest('.expand-btn')) { expanded = !expanded; try { localStorage.setItem('trust-site:expanded', expanded ? '1' : '0'); } catch (e) { } applyExpanded(); } });
+  applyTheme(); $('#theme').onclick = () => { t = themes[(themes.indexOf(t) + 1) % 3]; try { localStorage.setItem('referee-site:theme', t); } catch (e) { } applyTheme(); };
+  document.addEventListener('click', ev => { if (ev.target.closest('.expand-btn')) { expanded = !expanded; try { localStorage.setItem('referee-site:expanded', expanded ? '1' : '0'); } catch (e) { } applyExpanded(); } });
   render();
   if (location.hash.length > 1) { const el = document.getElementById(decodeURIComponent(location.hash.slice(1))); if (el) el.scrollIntoView(); }
 }

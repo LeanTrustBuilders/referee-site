@@ -3,7 +3,7 @@ description: >-
   Build the Referee-style site of a built Lean library with the LeanTrustBuilders suite, in one step:
   extract its dataset with the newest trust-extract release for its toolchain and publish it as the
   release dataset-<commit12>; record the build in the provenance ledger, kept on a branch of its own;
-  and build the site with trust-site, against the previous build the ledger recorded.
+  and build the site with referee-site, against the previous build the ledger recorded.
 
 # The workflow needs `contents: write` (the dataset's release, and the ledger's branch), and a
 # checkout with its history (`fetch-depth: 0`): the ledger dates what changed with git.
@@ -24,7 +24,7 @@ inputs:
       package counts as unaudited.
     default: ''
   args:
-    description: More arguments to `trust-site build` (--claims-only, --full-graph, --title, --evidence, …).
+    description: More arguments to `referee-site build` (--claims-only, --full-graph, --title, --evidence, …).
     default: ''
   extract-args:
     description: More arguments to `trust-extract extract` (--upstream-closure term, --parts, …).
@@ -93,7 +93,7 @@ runs:
       with:
         python-version: '3.12'
 
-    - name: trust-site, with evidence-core and evidence-store
+    - name: referee-site, with evidence-core and evidence-store
       shell: bash
       # This action's own revision of referee-site, so that the action and the tool agree.
       run: pip install -q "$GITHUB_ACTION_PATH"
@@ -153,5 +153,5 @@ runs:
         case "$DATASET" in /*) ;; *) DATASET="$GITHUB_WORKSPACE/$DATASET" ;; esac
         trust=""
         for p in $TRUST; do trust="$trust --trust $p"; done
-        trust-site build --dataset "$DATASET" --source . $LEDGER_ARGS $trust $ARGS --out "$out"
+        referee-site build --dataset "$DATASET" --source . $LEDGER_ARGS $trust $ARGS --out "$out"
         { echo "site=$out"; echo "dataset=$DATASET"; } >> "$GITHUB_OUTPUT"

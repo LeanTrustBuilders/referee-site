@@ -23,9 +23,9 @@ from evidence_core import Dataset
 
 from evidence_core import ledger as ledger_mod
 
-from trust_site import Options, build
-from trust_site.build import shard_of
-from trust_site.trust_index import IndexOptions, build_index
+from referee_site import Options, build
+from referee_site.build import shard_of
+from referee_site.trust_index import IndexOptions, build_index
 
 V = Path(__file__).parent / "vectors"
 A, B = Dataset.load(V / "fixture-a"), Dataset.load(V / "fixture-b")
@@ -117,7 +117,7 @@ class AssetTests(unittest.TestCase):
         # A browser holding the previous build's scripts must fetch the new ones at once.
         import hashlib
         import re
-        from trust_site.build import STATIC
+        from referee_site.build import STATIC
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "site"
             build(Options(dataset=V / "fixture-b", out=out))
@@ -267,7 +267,7 @@ class ClaimPageTests(unittest.TestCase):
     def test_page_data(self):
         from evidence_core import records as evrec
         from evidence_core.store import Store, default_config
-        from trust_site.claim_page import ClaimOptions, build_claim
+        from referee_site.claim_page import ClaimOptions, build_claim
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             store = Store.init(tmp / "evidence", {**default_config("owner/lib", "Fixture"), "claims": [F + "triple_pos"]})
@@ -320,7 +320,7 @@ class KernelCheckTests(unittest.TestCase):
     def test_the_site_and_the_claim_page_say_what_the_kernel_found(self):
         import shutil
         from evidence_core.store import Store, default_config
-        from trust_site.claim_page import ClaimOptions, build_claim
+        from referee_site.claim_page import ClaimOptions, build_claim
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             ds = tmp / "ds"
@@ -386,7 +386,7 @@ class PinsTests(unittest.TestCase):
             self.assertEqual([(n, p["comment"]) for n, p in site["wanted"]], [(F + "triple", "triple is injective")])
             self.assertEqual((site["forms"]["challenge"], site["forms"]["test"]), ("evidence-challenge.yml", "evidence-test.yml"))
             # The claim page's cards say the same.
-            from trust_site.claim_page import ClaimOptions, build_claim
+            from referee_site.claim_page import ClaimOptions, build_claim
             build_claim(ClaimOptions(dataset=ds_dir, out=tmp / "page", store=tmp / "evidence", source=V / "source-b", claim=F + "triple_pos"))
             cards = {e["name"]: e for p in (tmp / "page" / "data" / "m").glob("*.json") for e in json.loads(p.read_text())}
             self.assertIn(("wanted", "challenge"), [(p["source"], p["kind"]) for p in cards[F + "triple"]["pins"]])
@@ -461,7 +461,7 @@ class CommunityTests(unittest.TestCase):
         declarations are shown, marked with their store, and count unless the reader says not."""
         from evidence_core import records as evrec
         from evidence_core.store import Store, default_config
-        from trust_site.claim_page import ClaimOptions, build_claim
+        from referee_site.claim_page import ClaimOptions, build_claim
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             Store.init(tmp / "evidence", {**default_config("owner/lib", "Fixture"), "claims": [F + "triple_pos"],

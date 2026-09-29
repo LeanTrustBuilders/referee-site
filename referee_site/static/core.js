@@ -1,4 +1,4 @@
-/* trust-site core: what every page of a trust-site build shares — data loading, markdown and math,
+/* referee-site core: what every page of a referee-site build shares — data loading, markdown and math,
    hovers on the constants a text names, the statement taken apart, and a declaration's card. Loaded
    before the page's own script (app.js for the site, claim.js for a claim's page). */
 'use strict';
@@ -103,7 +103,7 @@ function setupTips() {
 // assumption per line, with a sentence about each from its head constant's docstring. One choice
 // for the whole site, remembered.
 let expanded = false;
-try { expanded = localStorage.getItem('trust-site:expanded') === '1'; } catch (e) { }
+try { expanded = localStorage.getItem('referee-site:expanded') === '1'; } catch (e) { }
 function applyExpanded() {
   document.body.classList.toggle('anat-expanded', expanded);
   document.querySelectorAll('.expand-btn').forEach(b => { b.textContent = expanded ? 'Compact' : 'Expand'; b.setAttribute('aria-pressed', String(expanded)); b.title = expanded ? 'One line per object; hover a name for what it is' : 'One line per assumption, with a sentence about each'; });
@@ -199,7 +199,7 @@ function transitiveReduction(ids, edges) {
   const reach = (a, skip) => { const s = new Set(), st = [...adj.get(a)].filter(x => x !== skip); while (st.length) { const x = st.pop(); if (s.has(x)) continue; s.add(x); st.push(...adj.get(x)); } return s; };
   const out = []; for (const [a, bs] of adj) for (const b of bs) if (!reach(a, b).has(b)) out.push([a, b]); return out;
 }
-let graphStack = false; try { graphStack = localStorage.getItem('trust-site:graph-stack') === '1'; } catch (e) { }
+let graphStack = false; try { graphStack = localStorage.getItem('referee-site:graph-stack') === '1'; } catch (e) { }
 
 // Where nodes and edges are drawn: the layered algorithm of ELK, the Eclipse Layout Kernel (bundled in
 // assets/vendor, EPL-2.0), top-down. Each node sits near what it connects to, and an edge that spans
@@ -277,7 +277,7 @@ function placeInRows(nodes, edges, L) {
 /* spec: {nodes: [{id, label, title, kind, href, summary, root, sorry, audit (a declaration name),
    upstream (its package, for a band node), trusted}], edges: [[user, dependency]], unit, caption,
    card: node → Promise<html> for the panel under the picture,
-   mark: node → {glyph, color} | null, a badge on the node (repainted on `trust-site:audit`),
+   mark: node → {glyph, color} | null, a badge on the node (repainted on `referee-site:audit`),
    marks: [[legend, meaning]] for the key, control: node → html under its card, wire: element → (),
    onSelect: node → () instead of the panel, hint: what to do with the picture}                   */
 function graph(host, spec) {
@@ -331,8 +331,8 @@ function graph(host, spec) {
     const canvas = $('.canvas', host);
     canvas.innerHTML = svg; canvas.classList.toggle('tall', height > 480);
     const vp = $('.vp', host), svgEl = $('svg', host), cardBox = $('.gcard', host), gkey = $('.gkey', host);
-    try { gkey.open = localStorage.getItem('trust-site:graph-key') === 'open'; } catch (e) { }
-    gkey.addEventListener('toggle', () => { try { localStorage.setItem('trust-site:graph-key', gkey.open ? 'open' : 'closed'); } catch (e) { } });
+    try { gkey.open = localStorage.getItem('referee-site:graph-key') === 'open'; } catch (e) { }
+    gkey.addEventListener('toggle', () => { try { localStorage.setItem('referee-site:graph-key', gkey.open ? 'open' : 'closed'); } catch (e) { } });
     let tx = 0, ty = 0, sc = 1, sel = null, filterSet = null;
     const apply = () => vp.setAttribute('transform', `translate(${tx},${ty}) scale(${sc})`);
     const fit = (all = false) => { const b = canvas.getBoundingClientRect(); svgEl.setAttribute('viewBox', `0 0 ${b.width} ${b.height}`); const s = Math.min(b.width / width, b.height / height, 1.4);
@@ -373,7 +373,7 @@ function graph(host, spec) {
         m.innerHTML = k ? `<circle cx="${c.w - 2}" cy="0" r="7" fill="${k.color}"/><text x="${c.w - 2}" y="3.5" text-anchor="middle" fill="#fff" style="font:700 10px var(--sans)">${k.glyph}</text>` : '';
       });
     }
-    paintMarks(); document.addEventListener('trust-site:audit', paintMarks);
+    paintMarks(); document.addEventListener('referee-site:audit', paintMarks);
     const ancestors = id => {
       const seen = new Set([id]), st = [id];
       while (st.length) for (const t of L.deps.get(st.pop()) || []) if (!seen.has(t)) { seen.add(t); st.push(t); }
@@ -402,7 +402,7 @@ function graph(host, spec) {
     host.querySelector('[data-a="clear"]').onclick = () => { $('input', host).value = ''; filterSet = null; select(null); };
     const xb = host.querySelector('[data-a="extra"]'); if (xb) xb.onclick = spec.extra.onClick;
     const sb = host.querySelector('[data-a="stack"]');
-    if (sb) sb.onclick = () => { graphStack = !graphStack; sb.setAttribute('aria-pressed', String(graphStack)); try { localStorage.setItem('trust-site:graph-stack', graphStack ? '1' : '0'); } catch (e) { } if (sel != null) select(sel); };
+    if (sb) sb.onclick = () => { graphStack = !graphStack; sb.setAttribute('aria-pressed', String(graphStack)); try { localStorage.setItem('referee-site:graph-stack', graphStack ? '1' : '0'); } catch (e) { } if (sel != null) select(sel); };
     $('input', host).addEventListener('input', e => { const q = e.target.value.trim().toLowerCase(); filterSet = q ? new Set(nodes.filter(n => n.label.toLowerCase().includes(q) || (n.title || '').toLowerCase().includes(q)).map(n => n.id)) : null; highlight(sel); });
     select(null);
   }

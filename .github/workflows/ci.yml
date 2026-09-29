@@ -20,7 +20,7 @@ jobs:
       - run: python3 -m unittest discover -s tests
       # A site from the fixture, and a check that its script parses.
       - run: |
-          trust-site build --dataset tests/vectors/fixture-b --source tests/vectors/source-b \
+          referee-site build --dataset tests/vectors/fixture-b --source tests/vectors/source-b \
             --baseline tests/vectors/fixture-a --out "$RUNNER_TEMP/site"
           for f in core app claim; do node --check "$RUNNER_TEMP/site/assets/$f.js"; done
 
