@@ -54,7 +54,7 @@ from pathlib import Path
 from evidence_core import Dataset, Evidence
 from evidence_core import analysis
 from evidence_core import records as evrec
-from evidence_core.store import Store
+from evidence_core.store import Store, with_imports
 
 #: Declarations per code file, as `trust export` writes them.
 CODE_SHARD_SIZE = 2000
@@ -81,6 +81,8 @@ class IndexOptions:
     #: The index's name: the directory under `out`, and trust-web's `?repo=`.
     name: str = ""
     evidence: Path | None = None
+    #: Where the stores the evidence store imports were fetched (evidence-store fetch-imports).
+    imports: Path | None = None
     #: `term` (trust's body edges) or `meaning`.
     body: str = "term"
     #: Packages to treat as trusted, with everything they depend on.
@@ -214,8 +216,13 @@ def marks(ds: Dataset, opt: IndexOptions, trusted_packages: list[str]) -> dict:
     protected: dict[str, dict] = {}
     path = Path(opt.evidence) if opt.evidence else None
     if path and path.exists():
-        records = Store.load(path).records if path.is_dir() else evrec.load(path)
-        ev = Evidence.resolve(records, ds)
+        sources = None
+        if path.is_dir() and opt.imports:
+            imported = with_imports(Store.load(path), opt.imports)
+            records, sources = imported.records, imported.sources
+        else:
+            records = Store.load(path).records if path.is_dir() else evrec.load(path)
+        ev = Evidence.resolve(records, ds, sources=sources)
         for name, rows in sorted(ev.by_decl.items()):
             for r, s in rows:
                 if r.get("kind") != "review" or not ev.in_force(r):
@@ -226,6 +233,8 @@ def marks(ds: Dataset, opt: IndexOptions, trusted_packages: list[str]) -> dict:
                     (f" on {r['at'][:10]}" if r.get("at") else "")
                 if r.get("text"):
                     note += f": {r['text']}"
+                if r.get("id") in ev.source:
+                    note += f" (from {ev.source[r['id']]})"
                 if s.applies and r.get("verdict") == "accept":
                     trusted[name] = {"name": name, "commit": commit, "note": note}
                 entry = {"name": name, "note": note, "status": PROTECTION.get(s.state, "unrecorded")}

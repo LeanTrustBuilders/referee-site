@@ -40,7 +40,7 @@ from evidence_store.forms import INVOLVEMENT as FORM_INVOLVEMENT, categories as 
 from evidence_core.pins import Pins
 from evidence_store.forms import FORMS as STORE_FORMS
 from evidence_core.source import Sources, split_statement
-from evidence_core.store import Store
+from evidence_core.store import Imported, Store, with_imports
 from evidence_core.views import views_on
 
 STATIC = Path(__file__).parent / "static"
@@ -57,6 +57,8 @@ class Options:
     source: Path | None = None
     baseline: Path | None = None
     evidence: Path | None = None
+    #: where the stores the evidence store imports were fetched (evidence-store fetch-imports)
+    imports: Path | None = None
     ledger: Path | None = None       # provenance across builds (see ledger.py)
     claims_only: bool = False
     only: list[str] = field(default_factory=list)
@@ -144,6 +146,7 @@ def build(opt: Options) -> dict:
 
     # --- claims and scope -------------------------------------------------------------------
     store = Store.load(opt.evidence) if opt.evidence and Path(opt.evidence).is_dir() else None
+    imported = with_imports(store, opt.imports) if store is not None and opt.imports else None
     rubric = store.rubric if store is not None else rb.STANDARD
     deprecated = docs_mod.deprecated(ds)          # from the attributes facet, if the dataset has it
     resolver = docs_mod.Resolver(ds)
@@ -262,7 +265,7 @@ def build(opt: Options) -> dict:
     # Changes against a baseline, and published evidence.
     base = Dataset.load(opt.baseline) if opt.baseline else None
     changes = compare(ds, base, scope_names={d.name for d in scope}) if base else None
-    ev = load_evidence(opt.evidence, ds, base, store)
+    ev = load_evidence(opt.evidence, ds, base, store, imported)
     reviews = {name: views_on(ev, name, "review") for name in ev.by_decl if views_on(ev, name, "review")} if ev else {}
     # The community's reviews: each declaration's threads (reviews, and the comments replying to them),
     # and where it stands under each policy a reader can choose, as evidence-core decides.
@@ -431,6 +434,8 @@ def build(opt: Options) -> dict:
         "title": title, "root": root, "repo": repo, "commit": commit, "toolchain": ds.toolchain,
         "issuesRepo": opt.issues_repo or repo,
         "producer": ds.producer(), "hasher": ds.hasher,
+        # The stores whose records the site shows beside its own store's, as read.
+        "imports": [{"repo": i["repo"], "commit": i["commit"], "records": i["records"]} for i in imported.read] if imported else [],
         "scope": {"mode": mode, "seeds": opt.only if opt.only else (cl.names if mode == "claims" else []),
                   "modules": opt.modules, "inModules": in_modules,
                   "size": len(scope) - len(proof_only), "library": len(project), "pulled": len(pulled),
@@ -579,9 +584,12 @@ def file_dates(root: Path | None, paths: set[str]) -> dict[str, dict]:
     return out
 
 
-def load_evidence(path: Path | None, ds: Dataset, base: Dataset | None, store: Store | None = None
-                  ) -> Evidence | None:
-    """Published evidence (S3), as evidence-core resolves it against this dataset; None without any."""
+def load_evidence(path: Path | None, ds: Dataset, base: Dataset | None, store: Store | None = None,
+                  imported: Imported | None = None) -> Evidence | None:
+    """Published evidence (S3), as evidence-core resolves it against this dataset, with the records
+    of the stores the store imports when ``imported`` has them; None without any."""
+    if imported is not None:
+        return Evidence.resolve(imported.records, ds, {base.commit: base} if base else None, sources=imported.sources)
     if store is not None:
         records = store.records
     elif path and Path(path).is_file():

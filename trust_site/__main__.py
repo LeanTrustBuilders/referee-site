@@ -24,6 +24,7 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--source", type=Path, help="a checkout of the library at the dataset's commit")
     b.add_argument("--baseline", type=Path, help="a dataset of an earlier commit, for Changes")
     b.add_argument("--evidence", type=Path, help="published evidence records (S3): a store's directory, or JSON lines")
+    b.add_argument("--imports", type=Path, help="where the stores the evidence store imports were fetched (evidence-store fetch-imports)")
     b.add_argument("--ledger", type=Path, help="the provenance ledger (`evidence-core ledger` records builds in it)")
     b.add_argument("--claims-only", action="store_true",
                    help="only the claims, what their statements rest on, and the theorems specifying it")
@@ -50,6 +51,7 @@ def main(argv: list[str] | None = None) -> int:
     cp.add_argument("--out", type=Path, required=True, help="where to write the page")
     cp.add_argument("--store", type=Path, help="the evidence store (a directory with store.json)")
     cp.add_argument("--evidence", type=Path, help="or: evidence records (S3, JSON lines)")
+    cp.add_argument("--imports", type=Path, help="where the stores the evidence store imports were fetched (evidence-store fetch-imports)")
     cp.add_argument("--claim", help="the claim (default: the store's first, else the first @[claim])")
     cp.add_argument("--source", type=Path, help="a checkout of the library at the dataset's commit")
     cp.add_argument("--at", type=Path, action="append", default=[], metavar="DATASET",
@@ -61,6 +63,7 @@ def main(argv: list[str] | None = None) -> int:
     ti.add_argument("--out", type=Path, required=True, help="the directory indexes are written under")
     ti.add_argument("--name", default="", help="the index's name, trust-web's ?repo= (default: the package)")
     ti.add_argument("--evidence", type=Path, help="published evidence records (S3, JSON lines)")
+    ti.add_argument("--imports", type=Path, help="where the stores the evidence store imports were fetched (evidence-store fetch-imports)")
     ti.add_argument("--body", choices=["term", "meaning"], default="term",
                     help="body edges: everything a definition's value mentions, as trust has it (term), "
                          "or its data only (meaning)")
@@ -74,19 +77,19 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "claim":
         from .claim_page import ClaimOptions, build_claim
         r = build_claim(ClaimOptions(dataset=args.dataset, out=args.out, store=args.store, evidence=args.evidence,
-                                     claim=args.claim, source=args.source, at=args.at, repo=args.repo, title=args.title))
+                                     imports=args.imports, claim=args.claim, source=args.source, at=args.at, repo=args.repo, title=args.title))
         print(f"claim: {r['claim']}, {r['declarations']} declarations, {r['records']} records → {args.out}")
         return 0
     if args.cmd == "trust-index":
         from .trust_index import IndexOptions, build_index
         r = build_index(IndexOptions(dataset=args.dataset, out=args.out, name=args.name, evidence=args.evidence,
-                                     body=args.body, trust=args.trust, decl_url=args.decl_url, start=args.start,
+                                     imports=args.imports, body=args.body, trust=args.trust, decl_url=args.decl_url, start=args.start,
                                      modules=args.modules))
         print(f"trust-index: {r['decls']} declarations, {r['stmt']} statement and {r['body']} body edges, "
               f"{r['trusted']} trusted, {r['characterized']} characterized, {r['reviewed']} reviewed → {r['out']}")
         return 0
     result = build(Options(dataset=args.dataset, out=args.out, source=args.source, baseline=args.baseline,
-                           evidence=args.evidence, ledger=args.ledger, claims_only=args.claims_only, full_graph=args.full_graph, only=args.only,
+                           evidence=args.evidence, imports=args.imports, ledger=args.ledger, claims_only=args.claims_only, full_graph=args.full_graph, only=args.only,
                            modules=args.modules,
                            claim=args.claim, comparator=args.comparator, trust=args.trust,
                            title=args.title, repo=args.repo, issues_repo=args.issues_repo))

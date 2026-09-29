@@ -28,7 +28,7 @@ from evidence_core import claims as claims_mod
 from evidence_core import records as recmod
 from evidence_core.checks import kernel_notions, kernel_summary
 from evidence_core.coverage import all_policies, policy_key, POLICY_SWITCHES, UNCOUNTED
-from evidence_core.store import Store
+from evidence_core.store import Store, with_imports
 from evidence_core.views import record_view
 from evidence_store.forms import FORMS as STORE_FORMS
 
@@ -44,6 +44,7 @@ class ClaimOptions:
     out: Path
     store: Path | None = None           # an evidence store (directory), or
     evidence: Path | None = None        # a JSONL file of records
+    imports: Path | None = None         # where the stores the store imports were fetched
     claim: str | None = None            # default: the store's first claim, else the first @[claim]
     source: Path | None = None
     at: list[Path] = field(default_factory=list)   # datasets of older commits
@@ -74,7 +75,8 @@ def reading_order(ds: Dataset, names: set[str], meaning: dict) -> list[str]:
 def build_claim(opt: ClaimOptions) -> dict:
     ds = Dataset.load(opt.dataset)
     store = Store.load(opt.store) if opt.store else None
-    records = store.records if store else (recmod.load(opt.evidence) if opt.evidence else [])
+    imported = with_imports(store, opt.imports) if store and opt.imports else None
+    records = imported.records if imported else store.records if store else (recmod.load(opt.evidence) if opt.evidence else [])
     config = store.config if store else {}
     # The claim: the one given, else the first the library claims (evidence-core's claims: the store's
     # list, formalization.yaml, Comparator configs, @[claim]).
@@ -90,7 +92,7 @@ def build_claim(opt: ClaimOptions) -> dict:
     # The site scoped to the claim: its data files are what the page renders declarations from.
     # (with the evidence, so that each declaration's card says what pins it down, reviewers' tests included)
     result = build(Options(dataset=opt.dataset, out=opt.out, source=opt.source, only=[claim], evidence=opt.store or opt.evidence,
-                           repo=repo, issues_repo=repo, title=opt.title))
+                           imports=opt.imports, repo=repo, issues_repo=repo, title=opt.title))
     out = opt.out
     shutil.move(out / "index.html", out / "site.html")
     (out / "index.html").write_text(versioned_page(STATIC / "claim.html"), encoding="utf-8")
@@ -99,7 +101,7 @@ def build_claim(opt: ClaimOptions) -> dict:
     for p in opt.at:
         d = Dataset.load(p)
         old[d.commit] = d
-    ev = Evidence.resolve(records, ds, old)
+    ev = Evidence.resolve(records, ds, old, sources=imported.sources if imported else None)
     meaning = ds.edges("meaning")
     closure = ds.closure(claim, "meaning")
     members = {d.name for d in closure if d.is_project} | {claim}
@@ -122,6 +124,7 @@ def build_claim(opt: ClaimOptions) -> dict:
         "packages": sorted({d.package for d in closure if not d.is_project}),
         "records": rows, "orphans": len(ev.orphans),
         "policy": {"switches": list(POLICY_SWITCHES), "states": states, "why": why},
+        "imports": [{"repo": i["repo"], "commit": i["commit"], "records": i["records"]} for i in imported.read] if imported else [],
         # Whether Lean's kernel accepted each declaration of the claim's closure with only its closure.
         "kernel": {n: kernel_summary(ds, n, order).as_json() for n in kernel_notions(ds)},
         "store": {"records": len(records), "maintainers": config.get("maintainers", [])} if store else None,

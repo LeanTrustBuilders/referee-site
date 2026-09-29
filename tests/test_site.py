@@ -308,10 +308,10 @@ class ClaimPageTests(unittest.TestCase):
             # evidence-core decided.
             self.assertEqual((rows[acc["id"]]["actions"], rows[prob["id"]]["actions"]), (["withdraw"], ["reopen"]))
             states = e["policy"]["states"]
-            self.assertEqual(len(states), 16)
-            self.assertEqual((states["0011"][F + "triple"], states["1011"][F + "triple"]), ("uncounted", "covered"))
-            self.assertEqual(e["policy"]["why"]["0011"][F + "triple"], "agents")
-            self.assertEqual(states["0011"][F + "triple_pos"], "covered")
+            self.assertEqual(len(states), 32)
+            self.assertEqual((states["00111"][F + "triple"], states["10111"][F + "triple"]), ("uncounted", "covered"))
+            self.assertEqual(e["policy"]["why"]["00111"][F + "triple"], "agents")
+            self.assertEqual(states["00111"][F + "triple_pos"], "covered")
 
 
 class KernelCheckTests(unittest.TestCase):
@@ -437,16 +437,16 @@ class CommunityTests(unittest.TestCase):
             site = json.loads((tmp / "site" / "data" / "site.json").read_text())
             rows = {r[1]: r for r in json.loads((tmp / "site" / "data" / "decls.json").read_text())}
             # Reviewed only by an AI agent: uncounted unless the policy counts agents (the first switch).
-            self.assertEqual(rows[F + "triple"][14], "u" * 8 + "c" * 8)
-            self.assertEqual(rows[F + "double"][14], "n" * 16)
+            self.assertEqual(rows[F + "triple"][14], "u" * 16 + "c" * 16)
+            self.assertEqual(rows[F + "double"][14], "n" * 32)
             entries = {e["name"]: e for p in (tmp / "site" / "data" / "m").glob("*.json") for e in json.loads(p.read_text())}
             kinds = sorted(r["kind"] for r in entries[F + "triple"]["records"])
             self.assertEqual(kinds, ["comment", "review"])
-            self.assertEqual(entries[F + "triple"]["why"]["0011"], "agents")
+            self.assertEqual(entries[F + "triple"]["why"]["00111"], "agents")
             k = site["community"]["claims"][F + "triple_pos"]
-            self.assertEqual(len(k), 16)
-            self.assertFalse(k[3]["covered"])                               # the default policy: agents not counted
-            self.assertIn(F + "triple", [n for n, _ in site["community"]["queue"][3]])
+            self.assertEqual(len(k), 32)
+            self.assertFalse(k[7]["covered"])                               # the default policy: agents not counted
+            self.assertIn(F + "triple", [n for n, _ in site["community"]["queue"][7]])
             ev = json.loads((tmp / "site" / "data" / "evidence.json").read_text())
             self.assertEqual(len(ev["records"]), 2)
             self.assertEqual(site["formOptions"]["categories"]["edge-cases"], "different edge cases")
@@ -455,6 +455,37 @@ class CommunityTests(unittest.TestCase):
             # Without evidence, there is no community mode.
             build(Options(dataset=V / "fixture-b", out=tmp / "site2"))
             self.assertIsNone(json.loads((tmp / "site2" / "data" / "site.json").read_text())["community"])
+
+    def test_imported_stores(self):
+        """A store importing another (S3, "Imported records"): the other's records about these
+        declarations are shown, marked with their store, and count unless the reader says not."""
+        from evidence_core import records as evrec
+        from evidence_core.store import Store, default_config
+        from trust_site.claim_page import ClaimOptions, build_claim
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            Store.init(tmp / "evidence", {**default_config("owner/lib", "Fixture"), "claims": [F + "triple_pos"],
+                                          "imports": [{"repo": "other/lib"}]})
+            theirs = Store.init(tmp / "cache" / "other" / "lib" / "evidence", default_config("other/lib", "Other"))
+            bob = {"kind": "person", "identity": {"kind": "github", "id": "bob"}}
+            [acc] = theirs.add([{"schema": evrec.SCHEMA, "kind": "review", "verdict": "accept", "by": bob,
+                                 "subject": evrec.subject_from_decl(B.by_name[F + "triple_pos"], B), "at": "2026-09-29T10:00:00Z"}])
+            (tmp / "cache" / "imports.json").write_text(json.dumps([{"repo": "other/lib", "path": "evidence", "commit": "abc"}]))
+            build(Options(dataset=V / "fixture-b", out=tmp / "site", source=V / "source-b", evidence=tmp / "evidence",
+                          imports=tmp / "cache"))
+            site = json.loads((tmp / "site" / "data" / "site.json").read_text())
+            self.assertEqual(site["imports"], [{"repo": "other/lib", "commit": "abc", "records": 1}])
+            rows = {r[1]: r for r in json.loads((tmp / "site" / "data" / "decls.json").read_text())}
+            # Counted under the default policy (index 7, `00111`), not with imported reviews off (`00110`).
+            self.assertEqual((rows[F + "triple_pos"][14][7], rows[F + "triple_pos"][14][6]), ("c", "u"))
+            [r] = [r for r in json.loads((tmp / "site" / "data" / "evidence.json").read_text())["records"] if r["id"] == acc["id"]]
+            self.assertEqual((r["source"], r["actions"]), ("other/lib", []))
+            build_claim(ClaimOptions(dataset=V / "fixture-b", out=tmp / "claim", store=tmp / "evidence",
+                                     imports=tmp / "cache", source=V / "source-b"))
+            data = json.loads((tmp / "claim" / "data" / "evidence.json").read_text())
+            self.assertEqual(data["imports"][0]["repo"], "other/lib")
+            self.assertEqual(data["policy"]["states"]["00111"][F + "triple_pos"], "covered")
+            self.assertEqual(data["policy"]["why"]["00110"][F + "triple_pos"], "imported")
 
 
 if __name__ == "__main__":
