@@ -39,11 +39,16 @@
 .cp .notice.bad { background: var(--bad-bg); color: var(--bad); padding: 6px 10px; border-radius: 6px; font-size: 14px; border-left: 3px solid var(--bad); }
 .cp-specs { font-size: 14px; margin: 8px 0; }
 .cp-specs ul { margin: 2px 0; padding-left: 20px; }
+/* What a definition is meant to be, and the domains its statement or body uses: the site's blocks, in a card. */
+.cp-intent { font-size: 14px; margin: 8px 0; }
+.cp-intent:empty { display: none; }
+.cp-intent h3 { font-family: inherit; font-size: 12px; font-weight: normal; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 10px 0 2px; }
+.cp-intent p { margin: 4px 0; }
 .lbl { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-right: 6px; }
 
 .cp-checklist summary { cursor: pointer; font-size: 14px; color: var(--muted); }
 .cp-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 4px 12px; margin: 6px 0 4px; font-size: 13px; }
-.cm { display: grid; grid-template-columns: 52px 1fr; column-gap: 6px; padding: 3px 6px; border-radius: 5px; background: var(--band); }
+.cm { display: grid; grid-template-columns: max-content 1fr; column-gap: 6px; padding: 3px 6px; border-radius: 5px; background: var(--band); }
 .cm .code { font-family: var(--mono); font-weight: 600; grid-row: span 2; }
 .cm .by { color: var(--muted); }
 .cm.yes .code { color: var(--good); } .cm.no .by { font-style: italic; }

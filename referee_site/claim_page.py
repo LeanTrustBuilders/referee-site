@@ -91,7 +91,7 @@ def build_claim(opt: ClaimOptions) -> dict:
 
     # The site scoped to the claim: its data files are what the page renders declarations from.
     # (with the evidence, so that each declaration's card says what pins it down, reviewers' tests included)
-    result = build(Options(dataset=opt.dataset, out=opt.out, source=opt.source, only=[claim], evidence=opt.store or opt.evidence,
+    result = build(Options(dataset=opt.dataset, out=opt.out, source=opt.source, only=[claim], claim=[claim], evidence=opt.store or opt.evidence,
                            imports=opt.imports, repo=repo, issues_repo=repo, title=opt.title))
     out = opt.out
     shutil.move(out / "index.html", out / "site.html")

@@ -70,7 +70,7 @@ function specsOf(e) {
     return `<li>${esc(PIN_KIND[p.kind] || p.kind)} ${declLink(p.decl)}${p.result && p.source === 'reviewers' ? ` ${PIN_RESULT[p.result] || ''}` : ''}${p.mentions === false ? ' <span class="chip bad" title="Its statement does not mention this definition: it does not pin it down">not about it</span>' : ''}${p.comment && p.kind !== 'characterization' ? ` <span class="muted">— ${md(p.comment, true)}</span>` : ''}</li>`;
   };
   const group = (src, lbl) => { const ps = pins.filter(p => p.source === src); return ps.length ? `<div class="lbl">${lbl}</div><ul>${ps.map(item).join('')}</ul>` : ''; };
-  return `<div class="cp-specs">${group('code', 'Pinned down in the code')}${group('reviewers', 'Tests listed by reviewers')}${group('wanted', 'Tests wanted')}</div>`;
+  return `<div class="cp-specs">${group('code', 'Pinned down in the code')}${group('catalogue', 'Pinned down by a catalogue, from outside the library')}${group('reviewers', 'Tests listed by reviewers')}${group('wanted', 'Tests wanted')}</div>`;
 }
 function declSection(n) {
   const e = entries.get(n), st = declState(n), [cls, label] = STATE_CHIP[st];
@@ -78,7 +78,7 @@ function declSection(n) {
   const disputed = st === 'disputed' ? `<div class="notice bad">Reviewers disagree: an acceptance and an open problem stand side by side. Read both.</div>` : '';
   return `<article class="cp-decl" id="${slug(n)}">
     <header><span class="chip ${cls}">${label}</span><h3>${esc(n)}</h3><span class="tally">${tally(n)}</span></header>
-    ${disputed}${e ? cardHtml(e) : ''}${alsoIn(e)}${specsOf(e)}
+    ${disputed}${e ? cardHtml(e) : ''}${alsoIn(e)}${e ? `<div class="cp-intent">${domainHtml(e)}${wellDefinedHtml(e)}</div>` : ''}${specsOf(e)}
     <details class="cp-checklist"${reviewsOf(n).length ? ' open' : ''}><summary>What reviewers checked</summary>${checklist(n)}</details>
     ${rs.length ? `<div class="cp-threads">${rs.map(thread).join('')}</div>` : ''}
     ${actions(n)}</article>`;
