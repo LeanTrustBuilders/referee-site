@@ -436,6 +436,9 @@ def build(opt: Options) -> dict:
         "producer": ds.producer(), "hasher": ds.hasher,
         # The stores whose records the site shows beside its own store's, as read.
         "imports": [{"repo": i["repo"], "commit": i["commit"], "records": i["records"]} for i in imported.read] if imported else [],
+        # Where each reviewed upstream declaration stands under every policy (one letter each), for
+        # the lists of what a declaration rests on: the reviews of what the library builds on.
+        "upstreamStates": {n: states(n) for n in reviews if n in ds.by_name and not ds.by_name[n].is_project},
         "scope": {"mode": mode, "seeds": opt.only if opt.only else (cl.names if mode == "claims" else []),
                   "modules": opt.modules, "inModules": in_modules,
                   "size": len(scope) - len(proof_only), "library": len(project), "pulled": len(pulled),

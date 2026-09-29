@@ -102,6 +102,12 @@ function beneath(id) {
 }
 const VERDICT_BADGE = {accept: ['accepted', 'accepted'], problem: ['sorry', 'problem'], question: ['query', 'question']};
 const STATE_BADGE = {covered: 'accepted', uncounted: 'stale', stale: 'stale', problem: 'sorry', disputed: 'sorry'};
+// An upstream declaration's reviews, under the reader's policy, in the community's mode.
+function upstreamBadge(name) {
+  const s = community() && (S.upstreamStates || {})[name];
+  const st = s ? RV.LETTER[s[RV.policyIndex(policy)]] : null;
+  return st && st !== 'unreviewed' ? ` <span class="badge ${STATE_BADGE[st]}" title="The community's reviews of it, under your policy">${esc(RV.STATE_CHIP[st][1])}</span>` : '';
+}
 function verdictBadge(name) {
   if (community()) {
     const row = byName.get(name), st = row ? stateOf(row) : 'unreviewed';
@@ -522,7 +528,7 @@ async function renderDecl(name) {
   h += `<h3>Dependency graph</h3>${views}${charsIn.length ? `<div class="seg dgviews" id="dgsubs"></div><p class="small muted" id="dgnote"></p>` : ''}<p class="small muted" id="dgfull" hidden></p><div class="graph" id="dg"></div>`;
   h += `<p><b>Audit surface:</b> ${plural(row[R.DEPS], 'project declaration')}, ${plural(row[R.EXT], 'external constant')}. ${b.total ? `${b.accepted}/${b.total} beneath ${community() ? 'reviewed by the community' : 'accepted'}${b.covered ? ' — covered' : ''}.` : ''}</p>`;
   if (e.outside?.length) h += `<p class="muted">Outside this scoped site: ${e.outside.map(x => `<code>${esc(x)}</code>`).join(', ')}.</p>`;
-  if (e.external.length) h += `<details><summary class="muted">The external constants its statement rests on</summary><ul>${e.external.map(([n, p, k]) => `<li><code data-c="${esc(n)}">${esc(n)}</code> <span class="muted">${esc(p)} · ${esc(k)}</span></li>`).join('')}</ul></details>`;
+  if (e.external.length) h += `<details><summary class="muted">The external constants its statement rests on</summary><ul>${e.external.map(([n, p, k]) => `<li><code data-c="${esc(n)}">${esc(n)}</code> <span class="muted">${esc(p)} · ${esc(k)}</span>${upstreamBadge(n)}</li>`).join('')}</ul></details>`;
   h += e.sorry ? `<p>✗ <b>Not proved:</b> ${e.ownSorry ? 'it contains a <code>sorry</code> itself' : `it rests on a <code>sorry</code>, through ${e.sorryVia.map(x => declLink(x)).join(', ')}`}.</p>` : `<p>✓ <b>Proved:</b> no <code>sorry</code> anywhere in its closure${e.axioms.length ? `, but it rests on the axioms ${e.axioms.map(a => `<code>${esc(a)}</code>`).join(', ')}` : ''}.</p>`;
   h += kernelLine(e);
   h += `<p class="muted" style="font-size:14px">This is this tool's own reading of one build's recorded axioms, and it is not robust against an author who wants it to pass. Checking meant to be relied on should go through <a href="https://github.com/leanprover/comparator">Comparator</a>, which replays the proof through the kernel against an explicit list of permitted axioms.</p>`;
@@ -794,7 +800,7 @@ async function renderCommunity() {
   }
   const next = S.community.queue[i] || [];
   h += `<section id="next"><h2>Review next</h2>${claims.length ? (next.length ? `<p class="muted">What the claims rest on that no review your policy counts covers yet, those more claims rest on first.</p><ol>${next.map(([n, w]) => `<li>${declLink(n)} <span class="muted">— ${verdictBadge(n)}${w > 1 ? ` · ${w} claims rest on it` : ''}</span></li>`).join('')}</ol>` : '<p class="muted">Nothing: everything the claims rest on is reviewed.</p>') : '<p class="muted">The project names no claims, so there is no order to review in: pick from <a href="#/theorems">Theorems</a>.</p>'}</section>`;
-  h += RV.reviewers(ev.records) + RV.activity(ctx, ev.records, id => { const r = ctx.recs.get(id); return r ? `${declHref(r.decl)}` : '#'; });
+  h += RV.reviewers(ev.records) + RV.activity(ctx, ev.records, id => { const r = ctx.recs.get(id); return !r ? '#' : byName.has(r.decl) ? declHref(r.decl) : (r.url || '#'); });
   return [h, () => {
     $('#main').querySelectorAll('[data-p]').forEach(x => x.onchange = () => { policy[x.dataset.p] = x.checked; RV.savePolicy(S.issuesRepo || S.repo, policy); coverageCache.clear(); route(); });
     RV.wireActivity($('#main'));
