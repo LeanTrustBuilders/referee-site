@@ -77,9 +77,9 @@ only* and outside every count. That can be many times more declarations: it is f
 With `--evidence` (a store's directory, or a JSONL file of records), the site has two modes, switched
 in the side bar; every badge, count and list follows the one chosen. It opens on the community's.
 
-**Mine** is a private review in the reader's browser: a verdict (accept, problem, question), the
-failure mode of a problem, what it was compared with, which failure modes were checked, caveats, the
-reviewer's involvement, and why. Reviews are keyed by meaning hash, so one of a declaration that
+**Mine** is a private review in the reader's browser: a verdict (accept, problem, question), what
+is wrong for a problem, what it was compared with, which axes of the store's rubric were checked,
+caveats, the reviewer's involvement, and why. Reviews are keyed by meaning hash, so one of a declaration that
 changed since reads "then changed". **Submit** opens the store's issue form, prefilled. **Export**
 writes the reviews as S3 records under the reader's GitHub account, for `evidence-store add` and a
 pull request; **Import** reads them back. Without evidence, this is the only mode.
@@ -101,7 +101,7 @@ A single page for one claim: the claim and what its statement rests on, in readi
 statements taken apart, what Lean checks about each (specifications, examples), and every review,
 problem, question and reply about them, as threads. A review of an earlier version says so, and with
 `--at` datasets of earlier commits, what changed underneath it. Coverage follows the reader's policy,
-with what is left to review, the failure modes nobody checked and the disagreements. Every "Review",
+with what is left to review, the axes of the rubric nobody checked and the disagreements. Every "Review",
 "Report a problem" and "Ask a question" opens the store's form, prefilled. The whole site, scoped to
 the claim, is kept beside it as `site.html`.
 

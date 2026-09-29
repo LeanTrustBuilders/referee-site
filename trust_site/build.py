@@ -35,7 +35,8 @@ from evidence_core import records as evrec
 from evidence_core.changes import compare
 from evidence_core.checks import kernel_notions, kernel_summary
 from evidence_core.coverage import UNCOUNTED, all_policies, coverage as coverage_of, policy_key, queue as queue_of
-from evidence_store.forms import CATEGORIES as FORM_CATEGORIES, CHECKS as FORM_CHECKS, INVOLVEMENT as FORM_INVOLVEMENT
+from evidence_core import rubric as rb
+from evidence_store.forms import INVOLVEMENT as FORM_INVOLVEMENT, categories as form_categories
 from evidence_core.pins import Pins
 from evidence_store.forms import FORMS as STORE_FORMS
 from evidence_core.source import Sources, split_statement
@@ -143,6 +144,7 @@ def build(opt: Options) -> dict:
 
     # --- claims and scope -------------------------------------------------------------------
     store = Store.load(opt.evidence) if opt.evidence and Path(opt.evidence).is_dir() else None
+    rubric = store.rubric if store is not None else rb.STANDARD
     deprecated = docs_mod.deprecated(ds)          # from the attributes facet, if the dataset has it
     resolver = docs_mod.Resolver(ds)
     cl = claims_mod.resolve(opt.source, names, explicit=opt.claim or None, comparator_dir=opt.comparator,
@@ -470,9 +472,10 @@ def build(opt: Options) -> dict:
                        for c in cl.names},
             "queue": [[[d.name, w] for d, w in queue_of(ev, cl.names, p, limit=40)] if cl.names else [] for p in POLICIES],
         } if ev else None,
+        # The rubrics records name axes of, by name, and the one the store's forms ask for.
+        "rubrics": {n: r.to_json() for n, r in rb.known(rubric).items()}, "rubric": rubric.name,
         # How the store's forms name their options, for prefilling them (evidence-store's).
-        "formOptions": {"categories": dict(FORM_CATEGORIES), "checks": dict(FORM_CHECKS),
-                        "involvement": dict(FORM_INVOLVEMENT)},
+        "formOptions": {"categories": dict(form_categories(rubric)), "involvement": dict(FORM_INVOLVEMENT)},
         "kernel": {n: kernel_summary(ds, n, [d.name for d in scope]).as_json() for n in kernel_rows},
         "ledger": {"builds": led["builds"]} if led["builds"] else None,
         "tipShards": tip_shards,

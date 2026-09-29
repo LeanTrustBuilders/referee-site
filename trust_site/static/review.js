@@ -5,14 +5,22 @@
 'use strict';
 
 const RV = (() => {
-  // The failure modes a reviewer checks (trusting-definitions.md), as the review form lists them.
-  const MODES = [['F1', 'the intended object'], ['F2', 'conventions'], ['F3', 'edge cases'], ['F4', 'junk values'],
-    ['F5', 'not vacuous'], ['F6', 'no arbitrary choice'], ['F7', 'what it rests on'], ['F9', 'generality'], ['naming', 'name and docstring']];
-  const CATEGORY = {F1: 'a different object', F2: 'a different convention', F3: 'different edge cases', F4: 'a junk value',
-    F5: 'vacuous or trivial', F6: 'an arbitrary choice', F7: 'something wrong underneath', F8: 'drift', F9: 'less general than the source',
-    naming: 'a misleading name or docstring', other: 'something else'};
-  // A failure mode as a reader sees it: its code, and what it is, never the code alone.
-  const modeName = (c, t) => `${c.startsWith('F') ? `<code>${esc(c)}</code> ` : ''}${esc(t)}`;
+  // The rubrics that records name axes of (S3), by name, and the store's: the one its forms ask for.
+  // A page sets them from its data (useRubrics).
+  let RUBRICS = {}, RUBRIC = {name: '', axes: []};
+  function useRubrics(rubrics, current) { RUBRICS = rubrics || {}; RUBRIC = RUBRICS[current] || {name: current || '', axes: []}; }
+  // The store's axes, {name, check, problem} each, in its rubric's order.
+  const axes = () => RUBRIC.axes;
+  const rubricName = () => RUBRIC.name;
+  const axisOf = (rubric, name) => ((RUBRICS[rubric] || {}).axes || []).find(a => a.name === name);
+  // An axis as a reader sees it: its name, with what it means on hover when its rubric is known.
+  const axisName = (rubric, name) => { const a = axisOf(rubric, name);
+    return `<span class="axis"${a ? ` title="${esc(a.check)}"` : ''}>${esc(name)}</span>`; };
+  // What a problem says is wrong, in words when its rubric is known.
+  const problemOf = (rubric, name) => name === 'other' ? 'something else' : ((axisOf(rubric, name) || {}).problem || name);
+  // A record's axes in its rubric's order, the ones it does not know last.
+  const inOrder = (rubric, names) => { const order = ((RUBRICS[rubric] || {}).axes || []).map(a => a.name);
+    const at = n => order.includes(n) ? order.indexOf(n) : order.length; return [...names].sort((a, b) => at(a) - at(b)); };
   const TITLE = {review: 'Review: ', problem: 'Problem: ', question: 'Question: ', status: 'Status: ', challenge: 'Challenge: ', test: 'Test: '};
   const STATE = {open: 'open', fixed: 'fixed', intended: 'intended as it is', invalid: 'not a problem', answered: 'answered',
     withdrawn: 'withdrawn', reopened: 'reopened'};
@@ -94,15 +102,16 @@ const RV = (() => {
   }
   function thread(ctx, r) {
     const head = r.verdict === 'accept' ? '<span class="v accept">Accepted</span>'
-      : r.verdict === 'problem' ? `<span class="v problem">Problem</span> <span class="muted">${esc(r.category)}: ${esc(CATEGORY[r.category] || '')}</span>`
+      : r.verdict === 'problem' ? `<span class="v problem">Problem</span> <span class="muted">${esc(problemOf(r.rubric, r.category))}</span>`
       : '<span class="v question">Question</span>';
     let h = `<div class="thread ${r.verdict}${inForce(r) ? '' : ' faded'}" id="r-${r.id}"><div class="t-head">${head} <span class="muted">by</span> <span class="by">${who(r.by)}</span> · ${when(r.at)} ${statusChip(r)} ${stateChip(r)}</div>`;
     let body = '';
     if (r.reference) body += `<div class="t-ref"><span class="lbl">Compared with</span> ${r.reference.url ? `<a href="${esc(r.reference.url)}">${esc(r.reference.text)}</a>` : esc(r.reference.text)}</div>`;
-    const checked = MODES.filter(([c]) => (r.checked || {})[c] === 'checked'), unchecked = MODES.filter(([c]) => (r.checked || {})[c] === 'unchecked');
+    const said = state => inOrder(r.rubric, Object.keys(r.checked || {}).filter(c => r.checked[c] === state));
+    const checked = said('checked'), unchecked = said('unchecked');
     if (checked.length || unchecked.length)
-      body += `<div class="t-checks">${checked.length ? `<span class="lbl">Checked</span> ${checked.map(([c, t]) => `<span class="ck yes">${modeName(c, t)}</span>`).join('')}` : ''}${unchecked.length ? ` <span class="lbl">Not checked</span> ${unchecked.map(([c, t]) => `<span class="ck no">${modeName(c, t)}</span>`).join('')}` : ''}</div>`;
-    if ((r.caveats || []).length) body += `<ul class="t-caveats">${r.caveats.map(c => `<li><b>${esc(c.category)}</b> ${md(c.note, true)}</li>`).join('')}</ul>`;
+      body += `<div class="t-checks">${checked.length ? `<span class="lbl">Checked</span> ${checked.map(c => `<span class="ck yes">${axisName(r.rubric, c)}</span>`).join('')}` : ''}${unchecked.length ? ` <span class="lbl">Not checked</span> ${unchecked.map(c => `<span class="ck no">${axisName(r.rubric, c)}</span>`).join('')}` : ''}</div>`;
+    if ((r.caveats || []).length) body += `<ul class="t-caveats">${r.caveats.map(c => `<li><b>${axisName(r.rubric, c.category)}</b> ${md(c.note, true)}</li>`).join('')}</ul>`;
     if (r.text) body += `<div class="t-text">${md(r.text)}</div>`;
     if (r.fix) body += `<div class="t-text"><span class="lbl">Suggested fix</span><pre>${esc(r.fix)}</pre></div>`;
     if (body) h += `<div class="t-body">${body}</div>`;
@@ -133,8 +142,8 @@ const RV = (() => {
   }
   function checklist(reviews) {
     const live = reviews.filter(r => r.verdict === 'accept' && inForce(r) && r.applies);
-    return `<div class="cp-checks" aria-label="What reviewers checked">${MODES.map(([c, t]) => {
-      const by = live.filter(r => (r.checked || {})[c] === 'checked');
+    return `<div class="cp-checks" aria-label="What reviewers checked">${axes().map(({name: c, check: t}) => {
+      const by = live.filter(r => r.rubric === RUBRIC.name && (r.checked || {})[c] === 'checked');
       return `<div class="cm ${by.length ? 'yes' : 'no'}" title="${esc(t)}"><span class="code">${esc(c)}</span><span class="what">${esc(t)}</span><span class="by">${by.length ? by.map(r => esc(r.by.kind === 'agent' ? (r.by.agent?.tool || 'AI') : r.by.login)).join(', ') : 'nobody yet'}</span></div>`;
     }).join('')}</div>`;
   }
@@ -178,7 +187,7 @@ const RV = (() => {
       <p class="muted small">Reviewers are not ranked. Where they disagree, both views are shown.</p></section>`;
   }
 
-  return {MODES, modeName, CATEGORY, TITLE, STATE, ACTION, SWITCHES, DEFAULT_POLICY, LETTER, STATE_CHIP, WHY, policyKey, policyIndex,
+  return {useRubrics, axes, rubricName, axisName, problemOf, TITLE, STATE, ACTION, SWITCHES, DEFAULT_POLICY, LETTER, STATE_CHIP, WHY, policyKey, policyIndex,
     loadPolicy, savePolicy, policyPanel, when, gh, who, formUrl, statusActions, reviewButtons, statusChip, stateChip, thread,
     tally, checklist, activity, wireActivity, reviewers};
 })();

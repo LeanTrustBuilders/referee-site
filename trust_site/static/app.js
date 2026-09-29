@@ -18,7 +18,7 @@ const scoped = () => S.scope.mode !== 'full';
 
 /* ---------- two ways to review ----------
    Mine: a private review in this browser, as detailed as a published one (verdict, what was wrong,
-   what it was compared with, the failure modes checked, caveats), which can be exported as S3
+   what it was compared with, the axes checked, caveats), which can be exported as S3
    records or submitted to the store. The community's: the store's reviews, people's and AI agents',
    read by evidence-core, and where each declaration stands under the reader's policy. */
 const MODE_KEY = () => `trust-site:mode:${S.repo}:${S.root}`;
@@ -127,15 +127,17 @@ function githubLogin() {
 }
 // My review as an S3 record (evidence-core's shape): what the store's forms would have recorded.
 function recordOf(d, a, login) {
-  const rec = {schema: 'ltb-evidence/1', kind: 'review', subject: d.subject, verdict: a.verdict,
+  const rec = {schema: 'ltb-evidence/2', kind: 'review', subject: d.subject, verdict: a.verdict,
     by: {kind: 'person', identity: {kind: 'github', id: login}, ...(a.involvement ? {involvement: a.involvement} : {})},
     at: a.at, origin: {kind: 'site', ref: location.href.split('#')[0]}};
   if (a.verdict === 'problem') rec.category = a.category || 'other';
   if (a.reference) { const url = a.reference.match(/https?:\/\/\S+/); rec.reference = {text: a.reference, ...(url ? {url: url[0].replace(/[).,]+$/, '')} : {})}; }
   const checked = Object.fromEntries(Object.entries(a.checked || {}).filter(([, v]) => v));
   if (Object.keys(checked).length) rec.checked = checked;
+  const names = [...RV.axes().map(x => x.name), 'other'];
   if (a.caveats) rec.caveats = a.caveats.split('\n').map(l => l.trim()).filter(Boolean).map(note => {
-    const m = note.match(/^(F\d|naming|other)\s*[:—-]\s*(.*)$/); return m ? {category: m[1], note: m[2]} : {category: 'other', note}; });
+    const m = note.match(/^([a-z][a-z0-9-]*)\s*[:—]\s*(.*)$/); return m && names.includes(m[1]) ? {category: m[1], note: m[2]} : {category: 'other', note}; });
+  if (['category', 'checked', 'caveats'].some(k => k in rec)) rec.rubric = RV.rubricName();
   if (a.note) rec.text = a.note;
   return rec;
 }
@@ -163,7 +165,7 @@ function importRecords(file) {
     for (const line of t.split('\n')) {
       if (!line.trim()) continue;
       let r; try { r = JSON.parse(line); } catch (e) { continue; }
-      if (r.schema !== 'ltb-evidence/1' || r.kind !== 'review' || !r.subject) continue;
+      if (r.schema !== 'ltb-evidence/2' || r.kind !== 'review' || !r.subject) continue;
       const row = byName.get(r.subject.name); if (!row) continue;
       audit.decls[r.subject.name] = {verdict: r.verdict, category: r.category, note: r.text || '',
         reference: r.reference?.text || '', checked: r.checked || {}, involvement: r.by?.involvement,
@@ -214,11 +216,11 @@ function auditControl(name) {
   return `<div class="audit" data-audit="${esc(name)}"><div class="top"><span><b>My review</b><code>${esc(name)}</code></span><span>private to this browser${S.community ? ' · <a href="#" data-mode="community">the community\'s reviews</a>' : ''}</span></div>
     <div class="seg"><button data-v="">unread</button><button data-v="accept">accept</button><button data-v="problem">problem</button><button data-v="question">question</button></div>
     <div class="rv-form"${v.verdict ? '' : ' hidden'}>
-      <label class="rv-cat"${v.verdict === 'problem' ? '' : ' hidden'}>What is wrong <select data-f="category">${Object.entries(RV.CATEGORY).filter(([k]) => k !== 'F8').map(([k, t]) => `<option value="${k}"${v.category === k ? ' selected' : ''}>${k === 'naming' || k === 'other' ? '' : k + ' '}${esc(t)}</option>`).join('')}</select></label>
+      <label class="rv-cat"${v.verdict === 'problem' ? '' : ' hidden'}>What is wrong <select data-f="category">${[...RV.axes().map(x => [x.name, x.problem]), ['other', 'something else']].map(([k, t]) => `<option value="${k}"${v.category === k ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></label>
       <label class="rv-row"${v.verdict === 'accept' ? '' : ' hidden'}>Compared with <input data-f="reference" value="${esc(v.reference || '')}" placeholder="the source you checked it against: a book, a paper, a URL"></label>
       <div class="rv-checks"${v.verdict === 'accept' ? '' : ' hidden'}><span class="lbl">What I checked</span> <span class="hint">tap once for checked, twice for not applicable, a third time to clear</span>
-        <div class="ck-list">${RV.MODES.map(([c, t]) => `<button type="button" data-ck="${c}" class="ck ${ck[c] || 'unset'}"><span class="box">${CHECK_BOX[ck[c] || '']}</span><span>${c.startsWith('F') ? `<b>${esc(c)}</b> ` : ''}${esc(((S.formOptions || {}).checks || {})[c] || t)}</span></button>`).join('')}</div></div>
-      <label class="rv-row"${v.verdict === 'accept' ? '' : ' hidden'}>Caveats <textarea data-f="caveats" rows="2" placeholder="what it holds only with, one per line (e.g. F3: only for nonzero x)">${esc(v.caveats || '')}</textarea></label>
+        <div class="ck-list">${RV.axes().map(({name: c, check: t}) => `<button type="button" data-ck="${esc(c)}" class="ck ${ck[c] || 'unset'}"><span class="box">${CHECK_BOX[ck[c] || '']}</span><span><b>${esc(c)}</b> ${esc(t)}</span></button>`).join('')}</div></div>
+      <label class="rv-row"${v.verdict === 'accept' ? '' : ' hidden'}>Caveats <textarea data-f="caveats" rows="2" placeholder="what it holds only with, one per line (e.g. edge-cases: only for nonzero x)">${esc(v.caveats || '')}</textarea></label>
       <label class="rv-row">I am <select data-f="involvement">${[['', 'not said'], ['outsider', 'an outsider to this library'], ['contributor', 'a contributor'], ['author', 'the author of this declaration']].map(([k, t]) => `<option value="${k}"${(v.involvement || '') === k ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></label>
     </div>
     <textarea class="note" data-f="note" placeholder="${v.verdict === 'problem' ? 'What is wrong, and why: a counterexample, the source it disagrees with' : v.verdict === 'question' ? 'The question for the author' : 'Why: what you compared it with, what you checked'}">${esc(v.note || '')}</textarea>
@@ -921,6 +923,7 @@ async function route() {
 }
 async function start() {
   [S, D, G] = await Promise.all([getJSON('data/site.json'), getJSON('data/decls.json'), getJSON('data/graph.json')]);
+  RV.useRubrics(S.rubrics, S.rubric);
   D.forEach((r, i) => { byName.set(r[R.NAME], r); idIndex.set(r[R.ID], i); });
   PROOF_ONLY = new Set(S.proofOnly || []);
   S.hasSpecs = Object.values(S.pins || {}).some(p => p.pinned);

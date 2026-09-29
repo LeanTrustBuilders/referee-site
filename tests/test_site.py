@@ -279,7 +279,7 @@ class ClaimPageTests(unittest.TestCase):
                         "verdict": verdict, "by": by, "at": "2026-09-26T10:00:00Z",
                         "origin": {"kind": "issue", "ref": "owner/lib#1"}, **extra}
             [acc, prob, old] = store.add([review("triple", text="ok", by=agent),
-                                          review("triple", "problem", category="F3", text="at 0"),
+                                          review("triple", "problem", rubric="ltb-rubric/1", category="edge-cases", text="at 0"),
                                           review("triple_pos")])
             store.add([{"schema": evrec.SCHEMA, "kind": "comment", "text": "agreed", "links": {"replies_to": prob["id"]},
                         "by": person, "at": "2026-09-26T11:00:00Z", "subject": prob["subject"]},
@@ -429,7 +429,8 @@ class CommunityTests(unittest.TestCase):
             agent = {"kind": "agent", "identity": {"kind": "github", "id": "alice"}, "agent": {"tool": "Claude Code"}}
             review = lambda n, **x: {"schema": evrec.SCHEMA, "kind": "review", "subject": evrec.subject_from_decl(B.by_name[F + n], B),
                                       "by": agent, "at": "2026-09-27T10:00:00Z", "origin": {"kind": "issue", "ref": "owner/lib#1"}, **x}
-            [acc] = store.add([review("triple", verdict="accept", text="checked", checked={"F3": "checked"})])
+            [acc] = store.add([review("triple", verdict="accept", text="checked", rubric="ltb-rubric/1",
+                                      checked={"edge-cases": "checked"})])
             store.add([{"schema": evrec.SCHEMA, "kind": "comment", "text": "agreed", "links": {"replies_to": acc["id"]},
                         "by": agent, "at": "2026-09-27T11:00:00Z"}])
             build(Options(dataset=V / "fixture-b", out=tmp / "site", source=V / "source-b", evidence=tmp / "evidence"))
@@ -448,7 +449,9 @@ class CommunityTests(unittest.TestCase):
             self.assertIn(F + "triple", [n for n, _ in site["community"]["queue"][3]])
             ev = json.loads((tmp / "site" / "data" / "evidence.json").read_text())
             self.assertEqual(len(ev["records"]), 2)
-            self.assertEqual(site["formOptions"]["categories"]["F3"], "F3 different edge cases")
+            self.assertEqual(site["formOptions"]["categories"]["edge-cases"], "different edge cases")
+            self.assertEqual(site["rubric"], "ltb-rubric/1")
+            self.assertEqual(site["rubrics"]["ltb-rubric/1"]["axes"][2]["name"], "edge-cases")
             # Without evidence, there is no community mode.
             build(Options(dataset=V / "fixture-b", out=tmp / "site2"))
             self.assertIsNone(json.loads((tmp / "site2" / "data" / "site.json").read_text())["community"])

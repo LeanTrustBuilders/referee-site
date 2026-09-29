@@ -9,7 +9,7 @@ let E;                                  // evidence.json
 const entries = new Map();              // declaration name → its entry (statement, code, specifications)
 const recs = new Map();                 // record id → record
 
-const {MODES, CATEGORY, TITLE, STATE, ACTION, STATE_CHIP, WHY} = RV;   // shared with the site (review.js)
+const {TITLE, STATE, ACTION, STATE_CHIP, WHY} = RV;   // shared with the site (review.js)
 
 /* ---------- the reader's policy ---------- */
 let policy = {...RV.DEFAULT_POLICY};
@@ -131,11 +131,11 @@ function reviewNext() {
     ...E.order.filter(n => openQuestions(n).length).map(n => [n, 'answer the open question'])];
   const gaps = E.order.filter(n => c.covered.includes(n)).map(n => {
     const live = reviewsOf(n).filter(r => r.verdict === 'accept' && inForce(r) && r.applies);
-    const none = MODES.filter(([m]) => !live.some(r => r.checked[m] === 'checked'));
-    return none.length ? [n, `reviewed, but nobody checked ${none.map(([m, t]) => m.startsWith('F') ? `${m} (${t})` : t).join(', ')}`] : null;
+    const none = RV.axes().filter(a => !live.some(r => r.rubric === RV.rubricName() && (r.checked || {})[a.name] === 'checked'));
+    return none.length ? [n, `reviewed, but nobody checked ${none.map(a => a.name).join(', ')}`] : null;
   }).filter(Boolean);
   const all = [...rank, ...gaps];
-  if (!all.length) return `<section class="cp-next" id="next"><h2>Review next</h2><p class="muted">Nothing: every declaration is covered, and every failure mode was checked by someone.</p></section>`;
+  if (!all.length) return `<section class="cp-next" id="next"><h2>Review next</h2><p class="muted">Nothing: every declaration is covered, and every item of the checklist was checked by someone.</p></section>`;
   return `<section class="cp-next" id="next"><h2>Review next</h2><ol>${all.map(([n, why]) =>
     `<li>${nameLink(n)} <span class="muted">— ${esc(why)}</span></li>`).join('')}</ol></section>`;
 }
@@ -179,6 +179,7 @@ function render() {
 }
 async function start() {
   [S, D, G, E] = await Promise.all([getJSON('data/site.json'), getJSON('data/decls.json'), getJSON('data/graph.json'), getJSON('data/evidence.json')]);
+  RV.useRubrics(S.rubrics, S.rubric);
   D.forEach(r => byName.set(r[R.NAME], r));
   E.records.forEach(r => recs.set(r.id, r));
   await Promise.all(E.order.map(async n => { const e = await declData(n); if (e) entries.set(n, e); }));
