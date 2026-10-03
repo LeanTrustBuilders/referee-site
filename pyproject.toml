@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "referee-site"
-version = "0.11.0"
+version = "0.12.0"
 description = "A Referee-style site for a Lean library, built from an S2 dataset and S3 evidence"
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
-dependencies = ["evidence-core[yaml] @ git+https://github.com/LeanTrustBuilders/evidence-core",
-                "evidence-store @ git+https://github.com/LeanTrustBuilders/evidence-store"]
+dependencies = ["evidence-core[yaml] @ git+https://github.com/LeanTrustBuilders/evidence-core@v0.16.1",
+                "evidence-store @ git+https://github.com/LeanTrustBuilders/evidence-store@v0.7.1"]
 
 [project.scripts]
 referee-site = "referee_site.__main__:main"

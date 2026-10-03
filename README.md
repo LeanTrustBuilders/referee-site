@@ -6,9 +6,12 @@ what the project claims, what changed, and who reviewed what. It is built from a
 evidence store (S3); it needs Python, not Lean.
 
 ```bash
-pip install git+https://github.com/LeanTrustBuilders/referee-site
+pip install git+https://github.com/LeanTrustBuilders/referee-site@v0.12.0
 referee-site build --dataset DATASET --source CHECKOUT --out site/ --trust mathlib
 ```
+
+Releases are tagged `v<version>`, and pin the evidence-core and evidence-store releases they were
+tested with.
 
 `CHECKOUT` is the library at the dataset's commit, read for source text, the README,
 `formalization.yaml` and Comparator configs. The result is a directory to serve as it is.
@@ -35,18 +38,21 @@ few hundred files. Search works from every page.
 One step builds the site of a library that CI has built:
 
 ```yaml
-- uses: LeanTrustBuilders/referee-site@main
+- uses: LeanTrustBuilders/referee-site@v0.12.0
   with:
     root: MyLibrary
     trust: mathlib            # optional: upstream packages the publisher vouches for
     out: home_page/referee    # optional: where the site goes, relative to the workspace
+    evidence: owner/my-store  # optional: an evidence store, a repository or a directory
 ```
 
 It extracts the dataset with the extractor's action (`extract-args`, `check` and `welldefined` pass
 through) and publishes it as the release `dataset-<commit12>`, records the build in a provenance
 ledger on the branch `trust-ledger` (`ledger:` to change it, empty for none), and builds the site
 against the previous recorded build; `args` passes anything else (`--claims-only`, `--full-graph`,
-`--title`). The workflow needs `contents: write` and a checkout with its history (`fetch-depth: 0`).
+`--title`). With `evidence`, the site shows the store's records and those of the stores it imports;
+a store given as a repository is cloned, and the site's forms open its issues. The workflow needs
+`contents: write` and a checkout with its history (`fetch-depth: 0`).
 Outputs: `site` and `dataset`. With `dataset:`, it builds from a dataset already extracted.
 
 ## Scope

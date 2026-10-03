@@ -3,7 +3,8 @@ description: >-
   Build the Referee-style site of a built Lean library with the LeanTrustBuilders suite, in one step:
   extract its dataset with the newest trust-extract release for its toolchain and publish it as the
   release dataset-<commit12>; record the build in the provenance ledger, kept on a branch of its own;
-  and build the site with referee-site, against the previous build the ledger recorded.
+  and build the site with referee-site, against the previous build the ledger recorded, with the
+  records of an evidence store if given.
 
 # The workflow needs `contents: write` (the dataset's release, and the ledger's branch), and a
 # checkout with its history (`fetch-depth: 0`): the ledger dates what changed with git.
@@ -38,6 +39,12 @@ inputs:
   welldefined-args:
     description: More arguments to `trust-extract welldefined`.
     default: '--jobs 4'
+  evidence:
+    description: >-
+      An evidence store whose records the site shows: a directory relative to the workspace, or a
+      repository (owner/name) whose evidence/ is the store. The stores it imports are fetched too, and
+      for a repository the site's forms open its issues.
+    default: ''
   dataset:
     description: A dataset already extracted, relative to the workspace, to build the site from instead of extracting one.
     default: ''
@@ -98,6 +105,24 @@ runs:
       # This action's own revision of referee-site, so that the action and the tool agree.
       run: pip install -q "$GITHUB_ACTION_PATH"
 
+    - id: evidence
+      if: inputs.evidence != ''
+      shell: bash
+      env:
+        EVIDENCE: ${{ inputs.evidence }}
+      run: |
+        set -euo pipefail
+        if [ -d "$GITHUB_WORKSPACE/$EVIDENCE" ]; then
+          store="$GITHUB_WORKSPACE/$EVIDENCE"
+          args=""
+        else
+          git clone -q --depth 1 "https://github.com/$EVIDENCE" "$RUNNER_TEMP/evidence-store"
+          store="$RUNNER_TEMP/evidence-store/evidence"
+          args="--issues-repo $EVIDENCE"
+        fi
+        evidence-store fetch-imports --store "$store" --out "$RUNNER_TEMP/evidence-imports"
+        echo "args=--evidence $store --imports $RUNNER_TEMP/evidence-imports $args" >> "$GITHUB_OUTPUT"
+
     - id: ledger
       if: inputs.ledger != ''
       shell: bash
@@ -146,6 +171,7 @@ runs:
         TRUST: ${{ inputs.trust }}
         ARGS: ${{ inputs.args }}
         LEDGER_ARGS: ${{ steps.ledger.outputs.args }}
+        EVIDENCE_ARGS: ${{ steps.evidence.outputs.args }}
       run: |
         set -euo pipefail
         out=${OUT:-$RUNNER_TEMP/referee-site}
@@ -153,5 +179,5 @@ runs:
         case "$DATASET" in /*) ;; *) DATASET="$GITHUB_WORKSPACE/$DATASET" ;; esac
         trust=""
         for p in $TRUST; do trust="$trust --trust $p"; done
-        referee-site build --dataset "$DATASET" --source . $LEDGER_ARGS $trust $ARGS --out "$out"
+        referee-site build --dataset "$DATASET" --source . $LEDGER_ARGS $EVIDENCE_ARGS $trust $ARGS --out "$out"
         { echo "site=$out"; echo "dataset=$DATASET"; } >> "$GITHUB_OUTPUT"
