@@ -6,7 +6,7 @@ what the project claims, what changed, and who reviewed what. It is built from a
 evidence store (S3); it needs Python, not Lean.
 
 ```bash
-pip install git+https://github.com/LeanTrustBuilders/referee-site@v0.12.0
+pip install git+https://github.com/LeanTrustBuilders/referee-site@v0.13.0
 referee-site build --dataset DATASET --source CHECKOUT --out site/ --trust mathlib
 ```
 
@@ -38,7 +38,7 @@ few hundred files. Search works from every page.
 One step builds the site of a library that CI has built:
 
 ```yaml
-- uses: LeanTrustBuilders/referee-site@v0.12.0
+- uses: LeanTrustBuilders/referee-site@v0.13.0
   with:
     root: MyLibrary
     trust: mathlib            # optional: upstream packages the publisher vouches for
@@ -67,13 +67,18 @@ scope, and the home page says so.
 
 Dependency graphs are laid out top-down by the layered algorithm of [ELK](https://eclipse.dev/elk/):
 what a node rests on is above it, and edges spanning several levels run between the nodes on them,
-never through one. Edges implied by a longer path are left out, and the upstream constants a
-statement names form a band on top. ELK (elkjs 0.9.3, EPL-2.0, vendored) is loaded the first time a
-page draws a graph; without it, the page falls back to rows by depth.
+never through one. Edges implied by a longer path are left out. ELK (elkjs 0.9.3, EPL-2.0, vendored)
+is loaded the first time a page draws a graph; without it, the page falls back to rows by depth.
 
 A declaration's graph shows what its meaning rests on: its statement, and a definition's value, with
-proofs erased. When the dataset has `term` edges, a second view, **Full, proofs included**, adds what
-its proofs use, faded. Every count, coverage figure and review list stays on the meaning graph. A
+proofs erased. What it rests on in the upstream packages nobody vouches for (none of `--trust` and
+what they require, nor the toolchain) is drawn as the project's own declarations are, in a band per
+package: the project's at the bottom, each upstream package's above those that require it and beside
+those it is independent of. A band holds everything the meaning rests on in that package when the
+dataset was extracted with `--upstream-closure meaning` (or `term`), and only what the project names
+from it otherwise. On request, a row on top shows what the statement names directly from audited
+packages. When the dataset has `term` edges, a second view, **Full, proofs included**, adds what
+its proofs use, faded, without the bands. Every count, coverage figure and review list stays on the meaning graph. A
 whole-library site always has the full view (one more file, loaded on demand); a scoped site has it
 only with `--full-graph`, which also gives pages to the declarations only proofs use, marked *proof
 only* and outside every count. That can be many times more declarations: it is for small libraries.

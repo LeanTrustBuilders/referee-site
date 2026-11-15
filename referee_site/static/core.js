@@ -163,8 +163,7 @@ const kindClass = k => /Definition|Instance|Opaque|Axiom/.test(k) ? 'definition'
 /* ---------- layered graphs ---------- */
 // Rows by longest-path depth: what rests on nothing first, each node one row below its bottom-most
 // dependency. Not where nodes are drawn (see `placeWithElk`), but the order "Everything it rests on"
-// lists them in, and the drawing when ELK cannot be loaded. Upstream nodes, when a graph has them, form
-// a row of their own above, grouped by package.
+// lists them in, and the drawing when ELK cannot be loaded.
 function layout(nodes, edges) {
   const deps = new Map(nodes.map(n => [n.id, []])), users = new Map(nodes.map(n => [n.id, []]));
   for (const [a, b] of edges) { if (deps.has(a) && deps.has(b)) { deps.get(a).push(b); users.get(b).push(a); } }
@@ -176,13 +175,11 @@ function layout(nodes, edges) {
     visiting.delete(id); row.set(id, r); return r;
   };
   const byId = new Map(nodes.map(n => [n.id, n]));
-  nodes.forEach(n => { if (n.upstream) row.set(n.id, -1); });
-  nodes.forEach(n => { if (!n.upstream) depth(n.id); });
-  const rows = []; for (const n of nodes) { const r = row.get(n.id) + 1; (rows[r] ||= []).push(n.id); }
+  nodes.forEach(n => depth(n.id));
+  const rows = []; for (const n of nodes) (rows[row.get(n.id)] ||= []).push(n.id);
   for (let k = 0; k < rows.length; k++) rows[k] ||= [];
   const lab = id => byId.get(id).label;
-  rows[0].sort((a, b) => (byId.get(a).upstream || '').localeCompare(byId.get(b).upstream || '') || lab(a).localeCompare(lab(b)));
-  for (const r of rows.slice(1)) r.sort((a, b) => lab(a).localeCompare(lab(b)));
+  for (const r of rows) r.sort((a, b) => lab(a).localeCompare(lab(b)));
   const pos = new Map(); rows.forEach(r => r.forEach((id, i) => pos.set(id, i)));
   for (let pass = 0; pass < 6; pass++) {
     const down = pass % 2 === 0;
@@ -226,41 +223,130 @@ function sectionPath(sec, dx, dy, lead = []) {
   if ((pts.length - 1) % 3 === 0) { for (let i = 1; i + 2 < pts.length; i += 3) d += `C${pts[i]} ${pts[i + 1]} ${pts[i + 2]}`; return d; }
   return d + 'L' + pts.slice(1).join('L');
 }
-// The upstream band: a row above the drawing, grouped by package. Its edges are bundled: ELK lays out a
-// single stand-in for the whole band, in a first layer of its own, and routes its edge to what uses the
-// band like any other; each band node drops to a line that joins that route. Forty constants named by a
-// statement then reach it as one line, not forty.
-async function placeWithElk(nodes, edges) {
+// Bands (`groups`, a node's `group` its key): a box per group, laid out by ELK with everything else
+// (its hierarchy handling), so that a box is above the boxes that rest on it and beside those it is
+// independent of, and an edge between boxes runs past the nodes in its way. `groupEdges` ([user,
+// dependency] keys) order the boxes beyond what the drawn edges say. A group that `bundle`s is one
+// row that ELK sees as a single node, in a layer of its own on top: it routes one edge from the box
+// to each node that uses the group, and each node of the group drops to a line along the box's foot
+// that joins them. Forty constants named by a statement then reach it as one line, not forty.
+const BAND = {top: 30, side: 14, foot: 14};
+const bandLabelWidth = g => (g.label.length + (g.note ? g.note.length + 1 : 0)) * 6.6 + 2 * BAND.side;
+async function placeWithElk(nodes, edges, groups = [], groupEdges = []) {
   const elk = await loadElk();
-  const isBand = new Set(nodes.filter(n => n.upstream).map(n => n.id));
-  const band = nodes.filter(n => isBand.has(n.id)).sort((a, b) => (a.upstream || '').localeCompare(b.upstream || '') || a.label.localeCompare(b.label));
-  const inner = nodes.filter(n => !isBand.has(n.id));
-  const bandUsers = [...new Set(edges.filter(([a, b]) => isBand.has(b) && !isBand.has(a)).map(([a]) => a))];
-  const res = await elk.layout({id: 'root',
-    layoutOptions: {'elk.algorithm': 'layered', 'elk.direction': 'DOWN', 'elk.edgeRouting': 'SPLINES',
-      'elk.spacing.nodeNode': '14', 'elk.layered.spacing.nodeNodeBetweenLayers': '38',
-      'elk.layered.spacing.edgeNodeBetweenLayers': '12', 'elk.spacing.edgeNode': '10', 'elk.spacing.edgeEdge': '6',
-      'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF', 'elk.padding': '[top=24,left=24,bottom=24,right=24]'},
-    children: inner.map(n => ({id: 'n' + n.id, width: nodeWidth(n), height: GRAPH_H}))
-      .concat(bandUsers.length ? [{id: 'band', width: 2, height: 2, layoutOptions: {'elk.layered.layering.layerConstraint': 'FIRST_SEPARATE'}}] : []),
-    edges: edges.map(([a, b], i) => [a, b, i]).filter(([a, b]) => !isBand.has(a) && !isBand.has(b))
-      .map(([a, b, i]) => ({id: 'e' + i, sources: ['n' + b], targets: ['n' + a]}))
-      .concat(bandUsers.map(u => ({id: 'u' + u, sources: ['band'], targets: ['n' + u]})))});
-  const GAP = 14, bandW = band.reduce((s, n) => s + nodeWidth(n) + GAP, band.length ? -GAP : 0);
-  const width = Math.max(res.width, bandW + 48), dx = (width - res.width) / 2, dy = band.length ? GRAPH_H + 44 : 0;
-  const coords = new Map();
-  for (const c of res.children || []) if (c.id !== 'band') coords.set(+c.id.slice(1), {x: c.x + dx, y: c.y + dy, w: c.width});
-  let x = (width - bandW) / 2;
-  for (const n of band) { const w = nodeWidth(n); coords.set(n.id, {x, y: 24, w}); x += w + GAP; }
-  const byEdge = new Map((res.edges || []).map(e => [e.id, e]));
-  const stand = (res.children || []).find(c => c.id === 'band');
-  const paths = edges.map(([a, b], i) => {
-    if (!isBand.has(b)) { const sec = byEdge.get('e' + i)?.sections?.[0]; return sec ? sectionPath(sec, dx, dy) : ''; }
-    const sec = byEdge.get('u' + a)?.sections?.[0], c = coords.get(b); if (!sec || !stand || !c) return '';
-    const bx = c.x + c.w / 2, busY = stand.y + dy + 1;
-    return sectionPath(sec, dx, dy, [[bx, c.y + GRAPH_H], [bx, busY], [stand.x + dx + 1, busY]]);
+  const GAP = 14, gi = new Map(groups.map((g, k) => [g.key, k])), byId = new Map(nodes.map(n => [n.id, n]));
+  const groupOf = id => gi.get(byId.get(id).group) ?? -1;
+  const bundled = id => groups[groupOf(id)]?.bundle;
+  const spacing = {'elk.spacing.nodeNode': '14', 'elk.layered.spacing.nodeNodeBetweenLayers': '38',
+    'elk.layered.spacing.edgeNodeBetweenLayers': '12', 'elk.spacing.edgeNode': '10', 'elk.spacing.edgeEdge': '6',
+    'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF'};
+  const leaf = n => ({id: 'n' + n.id, width: nodeWidth(n), height: GRAPH_H});
+  const members = groups.map(g => nodes.filter(n => n.group === g.key));
+  const rowWidth = ns => ns.reduce((s, n) => s + nodeWidth(n) + GAP, -GAP);
+  const children = nodes.filter(n => groupOf(n.id) < 0).map(leaf).concat(groups.map((g, k) => g.bundle
+    ? {id: 'g' + k, width: Math.max(rowWidth(members[k]) + 2 * BAND.side, bandLabelWidth(g)), height: BAND.top + GRAPH_H + BAND.foot,
+      layoutOptions: {'elk.layered.layering.layerConstraint': 'FIRST_SEPARATE'}}
+    : {id: 'g' + k, children: members[k].map(leaf), layoutOptions: {...spacing,
+      'elk.padding': `[top=${BAND.top},left=${BAND.side},bottom=${BAND.foot},right=${BAND.side}]`,
+      'elk.nodeSize.constraints': 'MINIMUM_SIZE', 'elk.nodeSize.minimum': `(0,${bandLabelWidth(g)})`}}));
+  const bus = (b, a) => `b${groupOf(b)}:${a}`, elkEdges = [], buses = new Set();
+  edges.forEach(([a, b], i) => {
+    if (bundled(a)) return;
+    if (!bundled(b)) { elkEdges.push({id: 'e' + i, sources: ['n' + b], targets: ['n' + a]}); return; }
+    const id = bus(b, a);
+    if (!buses.has(id)) { buses.add(id); elkEdges.push({id, sources: ['g' + groupOf(b)], targets: ['n' + a]}); }
   });
-  return {coords, paths, width, height: res.height + dy};
+  groupEdges.forEach(([u, d], i) => { if (gi.has(u) && gi.has(d) && !groups[gi.get(u)].bundle && !groups[gi.get(d)].bundle)
+    elkEdges.push({id: 'q' + i, sources: ['g' + gi.get(d)], targets: ['g' + gi.get(u)]}); });
+  // A box is at least as wide as its label. ELK lays out top-down by turning a left-to-right layout,
+  // and a box's minimum size turns with it: the width is the second coordinate.
+  const res = await elk.layout({id: 'root',
+    layoutOptions: {'elk.algorithm': 'layered', 'elk.direction': 'DOWN', 'elk.edgeRouting': 'SPLINES', ...spacing,
+      'elk.padding': '[top=24,left=24,bottom=24,right=24]', ...(groups.length ? {'elk.hierarchyHandling': 'INCLUDE_CHILDREN'} : {})},
+    children, edges: elkEdges});
+  // Where each box is: ELK gives a node relative to its box, and an edge relative to its `container`.
+  const at = new Map([['root', {x: 0, y: 0}]]), coords = new Map(), boxes = [];
+  for (const c of res.children || []) {
+    at.set(c.id, {x: c.x, y: c.y});
+    if (c.id[0] === 'n') { coords.set(+c.id.slice(1), {x: c.x, y: c.y, w: c.width}); continue; }
+    const k = +c.id.slice(1);
+    boxes.push({group: groups[k], x: c.x, y: c.y, w: c.width, h: c.height});
+    if (groups[k].bundle) {
+      let x = c.x + (c.width - rowWidth(members[k])) / 2;
+      for (const n of members[k]) { const w = nodeWidth(n); coords.set(n.id, {x, y: c.y + BAND.top, w}); x += w + GAP; }
+    } else for (const n of c.children || []) coords.set(+n.id.slice(1), {x: c.x + n.x, y: c.y + n.y, w: n.width});
+  }
+  const byEdge = new Map((res.edges || []).map(e => [e.id, e]));
+  const paths = edges.map(([a, b], i) => {
+    if (bundled(a)) return '';
+    const e = byEdge.get(bundled(b) ? bus(b, a) : 'e' + i), sec = e?.sections?.[0];
+    if (!sec) return '';
+    const o = at.get(e.container) || {x: 0, y: 0};
+    if (!bundled(b)) return sectionPath(sec, o.x, o.y);
+    const c = coords.get(b), bx = c.x + c.w / 2, foot = sec.startPoint.y + o.y;
+    return sectionPath(sec, o.x, o.y, [[bx, c.y + GRAPH_H], [bx, foot], [sec.startPoint.x + o.x, foot]]);
+  });
+  return {coords, paths, boxes, width: res.width, height: res.height};
+}
+// Without ELK, with bands: each band's rows by depth over its own edges, packed and centred in its
+// box; the boxes in layers by what they rest on (a bundled one on top), side by side within a layer;
+// one curve per edge.
+function placeInBands(nodes, edges, groups, groupEdges) {
+  const GAP = 14, ROWH = 58, LAYER = 38, PAD = 24;
+  const gi = new Map(groups.map((g, k) => [g.key, k])), of = new Map(nodes.map(n => [n.id, gi.get(n.group) ?? -1]));
+  const req = groups.map(() => new Set());
+  for (const [a, b] of edges) { const p = of.get(a), q = of.get(b); if (p >= 0 && q >= 0 && p !== q) req[p].add(q); }
+  for (const [u, d] of groupEdges) if (gi.has(u) && gi.has(d)) req[gi.get(u)].add(gi.get(d));
+  groups.forEach((g, k) => { if (g.bundle) { req[k].clear(); groups.forEach((h, j) => { if (!h.bundle) req[j].add(k); }); } });
+  const level = new Map(), visiting = new Set();
+  const lv = k => { if (level.has(k)) return level.get(k); if (visiting.has(k)) return 0; visiting.add(k);
+    let r = 0; for (const j of req[k]) r = Math.max(r, lv(j) + 1); visiting.delete(k); level.set(k, r); return r; };
+  const box = groups.map((g, k) => {
+    const ns = nodes.filter(n => of.get(n.id) === k), ids = new Set(ns.map(n => n.id));
+    const L = layout(ns, edges.filter(([a, b]) => ids.has(a) && ids.has(b)));
+    const widths = L.rows.map(r => r.reduce((s, id) => s + nodeWidth(L.byId.get(id)) + GAP, -GAP));
+    return {group: g, L, widths, w: Math.max(bandLabelWidth(g), ...widths.map(w => w + 2 * BAND.side)),
+      h: BAND.top + Math.max(0, L.rows.length - 1) * ROWH + GRAPH_H + BAND.foot, level: lv(k)};
+  }).filter(b => b.L.rows.length);
+  const layers = []; for (const b of box) (layers[b.level] ||= []).push(b);
+  const rows = layers.filter(Boolean), widthOf = l => l.reduce((s, b) => s + b.w + GAP, -GAP);
+  const width = Math.max(...rows.map(widthOf)) + 2 * PAD;
+  const coords = new Map(); let y = PAD;
+  for (const l of rows) {
+    let x = (width - widthOf(l)) / 2;
+    for (const b of l) {
+      Object.assign(b, {x, y});
+      b.L.rows.forEach((r, k) => { let nx = x + (b.w - b.widths[k]) / 2; for (const id of r) { const w = nodeWidth(b.L.byId.get(id)); coords.set(id, {x: nx, y: y + BAND.top + k * ROWH, w}); nx += w + GAP; } });
+      x += b.w + GAP;
+    }
+    y += Math.max(...l.map(b => b.h)) + LAYER;
+  }
+  const paths = edges.map(([a, b]) => {
+    const p = coords.get(b), q = coords.get(a); if (!p || !q) return '';
+    const x1 = p.x + p.w / 2, y1 = p.y + GRAPH_H, x2 = q.x + q.w / 2, y2 = q.y - 2, m = (y1 + y2) / 2;
+    return `M${x1},${y1} C${x1},${m} ${x2},${m} ${x2},${y2}`;
+  });
+  return {coords, paths, width, height: y - LAYER + PAD, boxes: box.map(({group, x, y, w, h}) => ({group, x, y, w, h}))};
+}
+// The bands behind the boxes: each widened to the edges of the drawing, or to halfway to the box
+// beside it, and to the height of its layer; labelled at its left, with its group's name and note,
+// over the edges (`labels`, drawn after them, on a halo of the band's colour).
+function bandsSvg(boxes, width) {
+  const layers = [];
+  for (const b of [...boxes].sort((p, q) => p.y - q.y)) {
+    const l = layers[layers.length - 1];
+    if (l && b.y < l.bottom) { l.boxes.push(b); l.bottom = Math.max(l.bottom, b.y + b.h); } else layers.push({top: b.y, bottom: b.y + b.h, boxes: [b]});
+  }
+  let rects = '', labels = '';
+  for (const l of layers) {
+    l.boxes.sort((p, q) => p.x - q.x).forEach((b, k, bs) => {
+      const left = k ? (bs[k - 1].x + bs[k - 1].w + b.x) / 2 + 3 : -5000, right = k < bs.length - 1 ? (b.x + b.w + bs[k + 1].x) / 2 - 3 : width + 5000;
+      const kind = esc(b.group.kind || '');
+      rects += `<rect class="pband ${kind}" x="${left.toFixed(1)}" y="${l.top.toFixed(1)}" width="${(right - left).toFixed(1)}" height="${(l.bottom - l.top).toFixed(1)}"/>`;
+      labels += `<text class="rowlbl plabel ${kind}" x="${(k ? left + 10 : 10).toFixed(1)}" y="${(l.top + 19).toFixed(1)}"><tspan class="bname">${esc(b.group.label)}</tspan>${b.group.note ? ` ${esc(b.group.note)}` : ''}</text>`;
+    });
+  }
+  return {rects, labels};
 }
 // Without ELK: the rows by depth, each packed and centred, and one curve per edge.
 function placeInRows(nodes, edges, L) {
@@ -275,7 +361,10 @@ function placeInRows(nodes, edges, L) {
   return {coords, paths, width: width + 140, height: L.rows.length * ROWH + PAD * 2};
 }
 /* spec: {nodes: [{id, label, title, kind, href, summary, root, sorry, audit (a declaration name),
-   upstream (its package, for a band node), trusted}], edges: [[user, dependency]], unit, caption,
+   group (the key of its band), package (an upstream node's), untrusted (dashed), muted (grey)}],
+   edges: [[user, dependency]], unit, caption,
+   groups: [{key, label, note, kind (a class of its band), bundle}], the bands, when there are any,
+   groupEdges: [[user, dependency]] between their keys (see placeWithElk),
    card: node → Promise<html> for the panel under the picture,
    mark: node → {glyph, color} | null, a badge on the node (repainted on `referee-site:audit`),
    marks: [[legend, meaning]] for the key, control: node → html under its card, wire: element → (),
@@ -286,8 +375,8 @@ function graph(host, spec) {
   const L = layout(nodes, edges), byId = L.byId;
   const lone = nodes.length <= 1;
   const H = GRAPH_H;
-  const hasBand = nodes.some(n => n.upstream);
-  const fillOf = n => n.root ? ['var(--root)', 'var(--root)', '#fff'] : n.upstream ? ['var(--band)', 'var(--faint)', 'var(--text)']
+  const groups = spec.groups || [], groupEdges = transitiveReduction(groups.map(g => g.key), spec.groupEdges || []);
+  const fillOf = n => n.root ? ['var(--root)', 'var(--root)', '#fff'] : n.muted ? ['var(--band)', 'var(--faint)', 'var(--text)']
     : ({definition: ['var(--def-bg)', 'var(--def)'], structure: ['var(--struct-bg)', 'var(--struct)'], lemma: ['var(--lemma-bg)', 'var(--lemma)']}[kindClass(n.kind)] || ['var(--lemma-bg)', 'var(--lemma)']).concat(['var(--text)']);
   const trunc = s => s.length > 26 ? s.slice(0, 25) + '…' : s;
   const key = [
@@ -296,8 +385,6 @@ function graph(host, spec) {
     spec.reduce === false ? null : ['Missing edges', `An edge implied by a longer path is not drawn, so what you see is the essential structure. Every ${unit} it connects is still reachable along the path that remains.`],
     nodes.some(n => n.root) ? ['Filled node', `The ${unit} this page is about.`] : null,
     nodes.some(n => n.sorry) ? ['Amber dashed outline', 'Depends on <code>sorry</code>: something in its closure is unproved.'] : null,
-    hasBand ? ['Top band', `Upstream declarations its statement names directly, grouped by package: what the statement is <em>about</em> from outside the project — by default only those from unaudited packages. Click one for its signature and docstring.`] : null,
-    nodes.some(n => n.upstream && !n.trusted) ? ['Grey dashed outline', 'From an upstream package nobody has vouched for: trusting this result means trusting it.'] : null,
     ...(spec.marks || []),
   ].filter(Boolean);
   host.innerHTML = lone ? `<p class="hint">One node, no edges: this ${unit} rests on nothing else drawn here.</p>` : `<div class="tools"><input type="search" placeholder="Filter ${units} by name"><button class="btn" data-a="fit">Fit view</button><button class="btn" data-a="clear">Clear focus</button>${spec.card ? `<button class="btn" data-a="stack" aria-pressed="${graphStack}" title="Open a card for the clicked ${unit} and for everything it rests on, what rests on nothing first">Everything it rests on</button>` : ''}${spec.extra ? `<button class="btn" data-a="extra" aria-pressed="${!!spec.extra.pressed}">${esc(spec.extra.label)}</button>` : ''}</div>
@@ -309,22 +396,22 @@ function graph(host, spec) {
   const gen = host._graphGen = (host._graphGen || 0) + 1;
   (async () => {
     let P;
-    try { P = await placeWithElk(nodes, edges); } catch (e) { P = placeInRows(nodes, edges, L); }
+    try { P = await placeWithElk(nodes, edges, groups, groupEdges); }
+    catch (e) { console.warn('graph: drawn without ELK', e); P = groups.length ? placeInBands(nodes, edges, groups, groupEdges) : placeInRows(nodes, edges, L); }
     if (host._graphGen === gen && host.isConnected) draw(P);
   })();
 
   function draw(P) {
     const {coords, width, height} = P;
     let svg = `<svg><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="var(--faint)"/></marker><marker id="ahh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="var(--link)"/></marker></defs><g class="vp">`;
-    if (hasBand) {
-      const y0 = Math.min(...nodes.filter(n => n.upstream).map(n => coords.get(n.id)?.y ?? Infinity));
-      if (isFinite(y0)) svg += `<rect class="bandbg" x="-5000" y="${y0 - 24}" width="${width + 10000}" height="${H + 36}"/><text class="rowlbl" x="10" y="${y0 - 10}">upstream</text>`;
-    }
+    const bands = P.boxes?.length ? bandsSvg(P.boxes, width) : {rects: '', labels: ''};
+    svg += bands.rects;
     edges.forEach(([a, b], i) => { if (P.paths[i]) svg += `<path class="edge" data-a="${a}" data-b="${b}" d="${P.paths[i]}" marker-end="url(#ah)"/>`; });
+    svg += bands.labels;
     for (const n of nodes) {
       const c = coords.get(n.id); if (!c) continue;
       const [fill, stroke, ink] = fillOf(n);
-      const dash = n.sorry ? ' stroke-dasharray="4 3" style="stroke:var(--warn)"' : ((n.upstream && !n.trusted) || n.untrusted ? ' stroke-dasharray="4 3"' : '');
+      const dash = n.sorry ? ' stroke-dasharray="4 3" style="stroke:var(--warn)"' : (n.untrusted ? ' stroke-dasharray="4 3"' : '');
       svg += `<g class="node${n.faded ? ' faded' : ''}" data-id="${n.id}" transform="translate(${c.x},${c.y})"><rect width="${c.w}" height="${H}" rx="7" fill="${fill}" stroke="${stroke}"${dash}/><text x="${c.w / 2}" y="17" text-anchor="middle" fill="${ink}">${esc(trunc(n.label))}</text><g class="mark"></g><title>${esc((n.kind ? n.kind + ': ' : '') + (n.title || n.label))}</title></g>`;
     }
     svg += '</g></svg>';
@@ -393,7 +480,7 @@ function graph(host, spec) {
       if (id == null) { cardBox.innerHTML = `<p class="hint">${esc(spec.caption || '')}</p>`; return; }
       const stack = graphStack && spec.card ? ancestors(id) : {ids: [id], dropped: 0};
       const lead = stack.ids.length > 1 ? `<p class="lead-note">${plural(stack.ids.length, unit)}: <code>${esc(byId.get(id).title || byId.get(id).label)}</code> and everything it rests on, what depends on nothing first, the clicked ${unit} last.${stack.dropped ? ` Its ${plural(stack.dropped, 'upstream constant')} are not listed; click one in the picture for its signature.` : ''}</p>` : '';
-      cardBox.innerHTML = lead + stack.ids.map(i => { const n = byId.get(i); return `<section class="gentry"><div class="ghead"><h3><code>${esc(n.title || n.label)}</code></h3>${n.href ? `<a class="btn" href="${n.href}">Open ${unit}</a>` : ''}</div>${n.sorry ? '<p class="warnline">⚠ depends on <code>sorry</code></p>' : ''}${n.upstream && !n.trusted ? `<p class="warnline">⚠ not audited — from <code>${esc(n.upstream)}</code></p>` : ''}<div class="gbody" data-node="${i}">${n.summary ? `<p class="muted">${esc(n.summary)}</p>` : ''}</div>${spec.control ? spec.control(n) : ''}</section>`; }).join('');
+      cardBox.innerHTML = lead + stack.ids.map(i => { const n = byId.get(i); return `<section class="gentry"><div class="ghead"><h3><code>${esc(n.title || n.label)}</code></h3>${n.href ? `<a class="btn" href="${n.href}">Open ${unit}</a>` : ''}</div>${n.sorry ? '<p class="warnline">⚠ depends on <code>sorry</code></p>' : ''}${n.untrusted && n.package ? `<p class="warnline">⚠ not audited — from <code>${esc(n.package)}</code></p>` : ''}<div class="gbody" data-node="${i}">${n.summary ? `<p class="muted">${esc(n.summary)}</p>` : ''}</div>${spec.control ? spec.control(n) : ''}</section>`; }).join('');
       if (spec.wire) spec.wire(cardBox);
       cardBox.querySelectorAll('.gbody').forEach(b => loader ? loader.observe(b) : load(b));
       const head = $('.lead-note, .ghead', cardBox); if (head) head.scrollIntoView({block: 'nearest', behavior: 'smooth'});

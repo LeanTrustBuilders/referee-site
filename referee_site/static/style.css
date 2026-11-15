@@ -211,7 +211,13 @@ body.anat-expanded .anat .exp { display: block; }
 .graph .canvas.dragging { cursor: grabbing; }
 .graph .node.sel rect { stroke-width: 2.6; }
 .graph .edge.hot { stroke: var(--link); stroke-width: 1.8; opacity: 1; }
-.graph .bandbg { fill: var(--code-bg); }
+/* a declaration graph's bands, one per package: unaudited ones dashed, as their declarations are */
+.graph .pband { fill: none; }
+.graph .pband.unaudited, .graph .pband.audited { fill: var(--code-bg); }
+.graph .pband.unaudited { stroke: var(--line-strong); stroke-dasharray: 6 4; }
+.graph .rowlbl .bname { font-weight: 700; fill: var(--muted); }
+.graph .plabel { paint-order: stroke; stroke: var(--bg); stroke-width: 5px; stroke-linejoin: round; pointer-events: none; }
+.graph .plabel.unaudited, .graph .plabel.audited { stroke: var(--code-bg); }
 .graph .btn[aria-pressed="true"] { background: var(--text); color: var(--panel); border-color: var(--text); }
 .graph .hint { font-size: 13px; color: var(--muted); margin: 8px 0 4px; }
 .gcard { margin-top: 10px; }

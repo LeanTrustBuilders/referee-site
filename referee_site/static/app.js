@@ -80,6 +80,11 @@ const proofOnly = r => PROOF_ONLY.has(r[R.ID]);
 const proofOnlyBadge = r => proofOnly(r) ? ' <span class="badge" title="On this site only because a proof uses it">proof only</span>' : '';
 // The full graph (`term`, proofs included), loaded when a reader first asks for it.
 let GF = null;
+// What the meanings rest on in the unaudited upstream packages (data/upstream.json): {nodes: {id:
+// [name, package, kind]}, edges: {id: [ids]}}, from the site's declarations and from those nodes.
+// Loaded with the first declaration graph that draws them.
+let UP = null, upLoading = null;
+const loadUpstream = () => upLoading ||= getJSON('data/upstream.json').then(u => (UP = u)).catch(() => (UP = {nodes: {}, edges: {}}));
 // Everything reachable from `roots` by `succ`, the roots included.
 function reach(roots, succ) {
   const seen = new Set(roots), stack = [...roots];
@@ -102,10 +107,14 @@ function beneath(id) {
 }
 const VERDICT_BADGE = {accept: ['accepted', 'accepted'], problem: ['sorry', 'problem'], question: ['query', 'question']};
 const STATE_BADGE = {covered: 'accepted', uncounted: 'stale', stale: 'stale', problem: 'sorry', disputed: 'sorry'};
+// Where an upstream declaration stands under the reader's policy, in the community's mode.
+function upstreamState(name) {
+  const s = community() && (S.upstreamStates || {})[name];
+  return s ? RV.LETTER[s[RV.policyIndex(policy)]] : null;
+}
 // An upstream declaration's reviews, under the reader's policy, in the community's mode.
 function upstreamBadge(name) {
-  const s = community() && (S.upstreamStates || {})[name];
-  const st = s ? RV.LETTER[s[RV.policyIndex(policy)]] : null;
+  const st = upstreamState(name);
   return st && st !== 'unreviewed' ? ` <span class="badge ${STATE_BADGE[st]}" title="The community's reviews of it, under your policy">${esc(RV.STATE_CHIP[st][1])}</span>` : '';
 }
 function verdictBadge(name) {
@@ -273,7 +282,7 @@ const STATE_MARK = {covered: {glyph: '✓', color: 'var(--good)'}, uncounted: {g
   problem: {glyph: '!', color: 'var(--bad)'}, disputed: {glyph: '!', color: 'var(--bad)'}, stale: {glyph: '~', color: 'var(--warn)'}};
 const AUDIT_GRAPH = {
   mark: n => {
-    if (!n.audit) return null;
+    if (!n.audit) return n.constant ? STATE_MARK[upstreamState(n.constant)] || null : null;
     if (community()) { const row = byName.get(n.audit); return row ? STATE_MARK[stateOf(row)] || null : null; }
     const v = verdictOf(n.audit); if (!v.verdict || v.stale) return null;
     return v.verdict === 'accept' ? {glyph: '✓', color: 'var(--good)'} : v.verdict === 'problem' ? {glyph: '!', color: 'var(--bad)'} : {glyph: '?', color: 'var(--warn)'}; },
@@ -491,12 +500,18 @@ async function renderDecl(name) {
     const subs = new Map();
     // The view: `meaning`, or `term` for the full graph.
     let notion = 'meaning';
+    // The graph: the project's declarations it reaches (`ids`, along `succ`), and on the meaning view
+    // the unaudited upstream declarations (`ups`, along `upSucc` from both): what those rest on in the
+    // upstream packages nobody vouches for, and what that rests on there. A definition taken from its
+    // characterization rests on nothing upstream but through the characterization.
     const graphOf = () => {
-      if (notion === 'term') { const succ = i => GF[i] || []; return {ids: [...reach([rootId], succ)], succ}; }
+      if (notion === 'term') { const succ = i => GF[i] || []; return {ids: [...reach([rootId], succ)], succ, ups: [], upSucc: () => [], rootPlain: false}; }
       const via = new Map(), skip = new Map();
       for (const [d, c] of subs) { via.set(d, c.thm); for (const s of c.structure) via.set(s, c.thm); skip.set(c.thm, new Set([d, ...c.structure])); }
       const succ = i => via.has(i) ? [via.get(i)] : (G[i] || []).filter(u => !(skip.get(i)?.has(u)));
-      return {ids: [...reach([rootId], succ)], succ};
+      const ids = [...reach([rootId], succ)];
+      const upSucc = i => (UP && !via.has(i) && UP.edges[i]) || [];
+      return {ids, succ, ups: UP ? [...reach(ids.flatMap(upSucc), upSucc)] : [], upSucc, rootPlain: !via.has(rootId)};
     };
     // What a definition's construction is, for saying how much of it a graph still reaches once the
     // definition is taken from its characterization: what the definition and the instances the
@@ -567,12 +582,19 @@ async function renderDecl(name) {
       if (s) { const [d, k] = s.dataset.cardSub.split(':').map(Number); toggle(d, k); }
       if (u) toggle(+u.dataset.cardUnsub);
     });
-    // The band: what the statement names directly from outside the project, the toolchain's own
-    // basics (`Nat`, `Eq`, …) left out. By default only what comes from an unaudited package — what
-    // this result has to be taken on trust for; the audited rest on request, remembered.
+    // The bands, one per package: the project's at the bottom; above it, those of the upstream
+    // packages nobody vouches for, whose declarations are drawn as the project's are, each band above
+    // the bands of the packages that require it and beside those it is independent of. On request,
+    // remembered, a row on top of what the statement names directly from audited packages, the
+    // toolchain's own basics (`Nat`, `Eq`, …) left out.
     const pkgs = new Map(S.packages.map(p => [p.name, p]));
-    const direct = (e.directExternal || []).map(n => [n, (e.external.find(x => x[0] === n) || [n, '', ''])]).filter(([, x]) => x[1] && !pkgs.get(x[1])?.toolchain);
-    const audited = direct.filter(([, x]) => pkgs.get(x[1])?.trusted).length;
+    const PROJECT = '\u0000project', AUDITED = '\u0000audited';
+    const projectName = S.packages.find(p => p.project)?.name || S.title;
+    const audited = (e.directExternal || []).map(n => e.external.find(x => x[0] === n) || [n, '', ''])
+      .filter(([, p]) => p && pkgs.get(p)?.trusted && !pkgs.get(p)?.toolchain)
+      .sort((x, y) => x[1].localeCompare(y[1]) || x[0].split('.').pop().localeCompare(y[0].split('.').pop()));
+    const requires = name => reach([name], q => pkgs.get(q)?.requires || []);
+    const follow = S.upstreamGraph?.follow;
     let showAudited = false; try { showAudited = localStorage.getItem('referee-site:graph-upstream') === '1'; } catch (err) { }
     let force = false;
     // The full view: what it adds, and that nothing is counted over it.
@@ -593,30 +615,49 @@ async function renderDecl(name) {
       nbox.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
       force = false; draw();
     });
+    const host = $('#dg');
     const draw = () => {
-      const {ids, succ} = graphOf();
+      const {ids, succ, ups, upSucc, rootPlain} = graphOf();
       const full = notion === 'term';
       for (const id of ['#dgsubs', '#dgnote']) { const el = $(id); if (el) el.hidden = full; }
       if (!full) { paintSubs(ids); note(ids, succ); }
       fullNote(ids);
-      if (ids.length > 600 && !force) {
-        $('#dg').innerHTML = `<p class="muted">${plural(ids.length, 'declaration')}: too many to draw quickly. <button class="btn" id="dgforce">Draw anyway</button></p>`;
+      const many = ups.length ? `${plural(ids.length, 'declaration')} of this project and ${plural(ups.length, 'upstream declaration')} from ${plural(new Set(ups.map(u => UP.nodes[u][1])).size, 'unaudited package')}` : plural(ids.length, 'declaration');
+      if (ids.length + ups.length > 600 && !force) {
+        host.innerHTML = `<p class="muted">${many}: too many to draw quickly. <button class="btn" id="dgforce">Draw anyway</button></p>`;
         $('#dgforce').onclick = () => { force = true; draw(); };
         return;
       }
       const set = new Set(ids), es = [];
       for (const i of ids) for (const u of succ(i)) if (set.has(u)) es.push([i, u]);
-      const ns = ids.map(i => { const r = D[idIndex.get(i)]; return {id: i, label: r[R.NAME].split('.').pop(), title: r[R.NAME], kind: r[R.KIND], href: declHref(r[R.NAME]), summary: r[R.SUMMARY], root: i === rootId, sorry: r[R.SORRY] > 0, audit: r[R.NAME], faded: full && !construction.has(i)}; });
-      if (!subs.size && !full)
-        direct.filter(([, x]) => showAudited || !pkgs.get(x[1])?.trusted).slice(0, 40).forEach(([n, x], j) => {
-          const id = -1 - j; ns.push({id, label: n.split('.').pop(), title: n, constant: n, kind: x[2], upstream: x[1], trusted: !!pkgs.get(x[1])?.trusted}); es.push([rootId, id]); });
-      graph($('#dg'), {nodes: ns, edges: es, unit: 'declaration', ...AUDIT_GRAPH,
-        card: nodeCard, control: n => n.id >= 0 ? cardControl(n.id) : '',
-        extra: !subs.size && !full && audited ? {label: showAudited ? 'Hide audited upstream' : `Show audited upstream (${audited})`, pressed: showAudited,
+      for (const i of [...ids, ...ups]) for (const u of upSucc(i)) es.push([i, u]);
+      const ns = ids.map(i => { const r = D[idIndex.get(i)]; return {id: i, label: r[R.NAME].split('.').pop(), title: r[R.NAME], kind: r[R.KIND], href: declHref(r[R.NAME]), summary: r[R.SUMMARY], root: i === rootId, sorry: r[R.SORRY] > 0, audit: r[R.NAME], faded: full && !construction.has(i), group: PROJECT}; });
+      const upPkgs = new Set();
+      for (const u of ups) { const [n, p, k] = UP.nodes[u]; upPkgs.add(p); ns.push({id: u, label: n.split('.').pop(), title: n, constant: n, kind: k, package: p, group: p, untrusted: true}); }
+      const top = showAudited && rootPlain ? audited.slice(0, 40) : [];
+      top.forEach(([n, p, k], j) => { const id = -1 - j; ns.push({id, label: n.split('.').pop(), title: n, constant: n, kind: k, package: p, group: AUDITED, muted: true}); es.push([rootId, id]); });
+      const groups = [], groupEdges = [];
+      if (top.length) groups.push({key: AUDITED, label: [...new Set(top.map(x => x[1]))].join(', '), note: '· audited, what its statement names directly', kind: 'audited', bundle: true});
+      for (const p of [...upPkgs].sort()) {
+        groups.push({key: p, label: p || 'unknown package', note: '· not audited', kind: 'unaudited'});
+        groupEdges.push([PROJECT, p]);
+        for (const q of requires(p)) if (q !== p && upPkgs.has(q)) groupEdges.push([p, q]);
+      }
+      if (groups.length) groups.push({key: PROJECT, label: projectName, note: '· this project', kind: 'project'});
+      const keys = [];
+      if (groups.length) keys.push(['Bands', `One per package: this project's at the bottom${ups.length ? `; above it, what the meaning rests on in the upstream packages nobody has vouched for, drawn as the project's own, each package above those that require it and beside those it is independent of` : ''}${top.length ? `; on top, what its statement names directly from audited packages` : ''}.${ups.length && follow !== 'meaning' && follow !== 'term' ? (follow === 'statement'
+        ? ' The dataset follows only statements past the project (<code>--upstream-closure statement</code>): what an upstream definition\'s value rests on is not drawn.'
+        : ' The dataset stops at the project (it was extracted without <code>--upstream-closure</code>): an unaudited band is what the project names from that package, not what that rests on in turn.') : ''}`]);
+      if (ups.length) keys.push(['Grey dashed outline', 'From an upstream package nobody has vouched for: trusting this result means trusting it. Click one for its signature and docstring.']);
+      graph(host, {nodes: ns, edges: es, groups, groupEdges, unit: 'declaration', ...AUDIT_GRAPH, marks: [...keys, ...AUDIT_GRAPH.marks],
+        card: nodeCard, control: n => n.href ? cardControl(n.id) : '',
+        extra: rootPlain && audited.length ? {label: showAudited ? 'Hide audited upstream' : `Show audited upstream (${audited.length})`, pressed: showAudited,
           onClick: () => { showAudited = !showAudited; try { localStorage.setItem('referee-site:graph-upstream', showAudited ? '1' : '0'); } catch (err) { } draw(); }} : null,
-        caption: `${plural(ids.length, 'declaration')}, each below what it rests on. ${full ? 'A theorem points to what its proof uses too; faded, what only proofs reach. ' : subs.size ? 'A definition taken from its characterization points to it. ' : ''}Click a node to read it here.`});
+        caption: `${many}, each below what it rests on. ${full ? 'A theorem points to what its proof uses too; faded, what only proofs reach. ' : subs.size ? 'A definition taken from its characterization points to it. ' : ''}Click a node to read it here.`});
     };
-    draw();
+    // Drawn once the unaudited upstream declarations are loaded, when the site has any.
+    if (UP || !S.upstreamGraph?.nodes) draw();
+    else { host.innerHTML = '<p class="hint">Laying out…</p>'; loadUpstream().then(() => { if (host.isConnected) draw(); }); }
   }];
 }
 

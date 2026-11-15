@@ -14,6 +14,7 @@ Run with ``python3 -m unittest discover -s tests``.
 from __future__ import annotations
 
 import json
+import shutil
 import struct
 import tempfile
 import unittest
@@ -164,6 +165,84 @@ class FullGraphTests(unittest.TestCase):
             self.assertEqual(site["counts"]["decls"], site["scope"]["size"])
             self.assertEqual(site["counts"]["decls"], len(ids) - 1)
             self.assertIn(ids[F + "one_pos'"], read("graph-full.json")[str(ids[F + "one"])])
+
+
+def with_packages(src: Path, dst: Path, packages: dict[str, tuple[set[str], list[str]]]) -> Path:
+    """A copy of the dataset `src` in which the upstream declarations named in `packages` belong to
+    those packages instead (package → (names, what it requires)), which the project requires too: the
+    fixture's only upstream package is the toolchain, which is always trusted."""
+    shutil.copytree(src, dst)
+    owner = {n: p for p, (names, _) in packages.items() for n in names}
+    rows = [json.loads(l) for l in (dst / "decls.jsonl").read_text().splitlines()]
+    for r in rows:
+        if r["scope"] == "upstream" and r["name"] in owner:
+            r["package"] = owner[r["name"]]
+    (dst / "decls.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    meta = json.loads((dst / "meta.json").read_text())
+    project = meta["library"]["package"]
+    for p in meta["packages"]:
+        if p["name"] == project:
+            p["requires"] = sorted(set(p["requires"]) | set(packages))
+    meta["packages"] += [{"name": p, "requires": req, "modules": 1} for p, (_, req) in packages.items()]
+    (dst / "meta.json").write_text(json.dumps(meta))
+    return dst
+
+
+class UpstreamGraphTests(unittest.TestCase):
+    """What a declaration's graph draws of the upstream packages nobody vouches for: their declarations
+    the meanings rest on, and with an upstream closure what those rest on there, short of a trusted
+    package. Two made-up packages of the fixture's toolchain declarations: `Base` (`Nat`, `Add`,
+    `Mul`), and `Arith`, which requires it."""
+
+    PACKAGES = {"Base": ({"Nat", "Add", "Mul"}, ["lean4"]),
+                "Arith": ({"HAdd", "HMul", "Nat.add", "Nat.mul", "instAddNat", "instHAdd", "instHMul", "instMulNat"}, ["Base", "lean4"])}
+
+    def test_bands_of_unaudited_packages(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            closed = with_packages(V / "fixture-b-closure", tmp / "closed", self.PACKAGES)
+            ds = Dataset.load(closed)
+            out = tmp / "site"
+            read = lambda f: json.loads((out / "data" / f).read_text())
+
+            def upstream(**kw):
+                build(Options(out=out, **kw))
+                up = read("upstream.json")
+                names = {int(i): n for i, (n, _, _) in up["nodes"].items()}
+                name = lambda i: names.get(i) or ds.decls[i].name
+                return up, {name(int(s)): {name(t) for t in ts} for s, ts in up["edges"].items()}
+
+            up, edges = upstream(dataset=closed)
+            nodes = {n: (p, k) for n, p, k in up["nodes"].values()}
+            self.assertEqual(read("site.json")["upstreamGraph"], {"nodes": len(nodes), "follow": "term"})
+            self.assertEqual({p for p, _ in nodes.values()}, {"Base", "Arith"})
+            self.assertEqual(nodes["Nat"], ("Base", "Inductive"))
+            # From the project, its meaning edges into the packages; from there, their own, short of
+            # the toolchain (`Nat.add` rests on `PProd` too).
+            self.assertTrue({"instAddNat", "instHAdd"} <= set().union(*(ts for s, ts in edges.items() if s.startswith(F))))
+            self.assertEqual(edges["instAddNat"], {"Add", "Nat", "Nat.add"})
+            self.assertEqual(edges["Nat.add"], {"Nat"})
+            self.assertFalse(set().union(*edges.values()) - set(nodes))
+            # `Nat.add` is named by no statement of the project: here through `instAddNat`, with a hover.
+            self.assertNotIn("Nat.add", {by for e in read("m/0.json") for by in e["directExternal"]})
+            tips = {}
+            for f in (out / "data" / "tips").glob("*.json"):
+                tips.update(json.loads(f.read_text()))
+            self.assertEqual(tips["Nat.add"][3], "Arith")
+
+            # Trusting a package trusts what it requires.
+            self.assertEqual(upstream(dataset=closed, trust=["Arith"])[0], {"nodes": {}, "edges": {}})
+            up, edges = upstream(dataset=closed, trust=["Base"])
+            self.assertEqual({p for _, p, _ in up["nodes"].values()}, {"Arith"})
+            self.assertEqual(edges["instAddNat"], {"Nat.add"})
+            self.assertNotIn("Nat.add", edges)
+
+            # Without a closure: what the project names from them, and no edges of their own.
+            flat = with_packages(V / "fixture-b", tmp / "flat", self.PACKAGES)
+            up, edges = upstream(dataset=flat)
+            self.assertEqual(read("site.json")["upstreamGraph"]["follow"], None)
+            self.assertNotIn("Nat.add", {n for n, _, _ in up["nodes"].values()})
+            self.assertTrue(all(s.startswith(F) for s in edges))
 
 
 class TrustIndexTests(unittest.TestCase):

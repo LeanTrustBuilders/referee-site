@@ -14,6 +14,8 @@ keeps the reader's own audit. The output is:
 * ``data/graph.json`` — the meaning edges between declarations in scope, for graphs and coverage;
 * ``data/graph-full.json`` — the `term` edges between them, proofs included, when the site has a full
   graph: the dependency graph's second view, loaded when a reader asks for it;
+* ``data/upstream.json`` — the declarations of the unaudited upstream packages that the meanings in
+  scope rest on, with their `meaning` edges and those into them, for the bands of a declaration's graph;
 * ``data/m/<n>.json`` — per module, everything its declarations' pages show.
 """
 from __future__ import annotations
@@ -109,6 +111,16 @@ def kind_label(decl, keyword: str | None) -> str:
     return {"definition": "Definition", "instance": "Instance", "structure": "Structure",
             "class": "Class", "inductive": "Inductive", "axiom": "Axiom", "opaque": "Opaque"}.get(
         decl.kind, "Definition")
+
+
+def upstream_kind(decl) -> str:
+    """An upstream declaration's kind, as a hover and a graph name it: the dataset does not have the
+    keyword it is written with."""
+    if decl.is_prop:
+        return "Theorem"
+    return {"definition": "Definition", "instance": "Instance", "structure": "Structure", "class": "Class",
+            "inductive": "Inductive", "axiom": "Axiom", "opaque": "Opaque", "constructor": "Constructor",
+            "recursor": "Recursor"}.get(decl.kind, decl.kind.title())
 
 
 def module_title(docs: list[str]) -> str:
@@ -346,6 +358,37 @@ def build(opt: Options) -> dict:
         }
         shards[mod_index.get(d.module, -1)].append(entry)
 
+    # --- the upstream graph -----------------------------------------------------------------------
+    # What the meanings in scope rest on in the upstream packages nobody vouches for (neither trusted
+    # through --trust nor the toolchain), which a declaration's graph draws as it draws the project's,
+    # in a band per package: the `meaning` edges of the declarations in scope into those packages, and
+    # from the upstream declarations reached, with an upstream closure, their own (`upstream-meaning`),
+    # never into a trusted package. Without a closure an upstream node has no edges of its own, and
+    # its band is what the project names from it.
+    packages = ds.packages
+    trusted = analysis.trusted_packages(packages, opt.trust)
+
+    def unaudited(t: int) -> bool:
+        d = by_id[t]
+        return not d.is_project and d.package != "lean4" and d.package not in trusted
+    up_meaning = ds.edges("upstream-meaning") if "upstream-meaning" in ds.notions() else {}
+    up_edges: dict[int, list[int]] = {}
+    for d in scope:
+        ts = sorted({t for t in meaning.get(d.id, ()) if unaudited(t)})
+        if ts:
+            up_edges[d.id] = ts
+    up_nodes = {t for ts in up_edges.values() for t in ts}
+    frontier = list(up_nodes)
+    while frontier:
+        x = frontier.pop()
+        ts = sorted({t for t in up_meaning.get(x, ()) if t != x and unaudited(t)})
+        if ts:
+            up_edges[x] = ts
+        for t in ts:
+            if t not in up_nodes:
+                up_nodes.add(t)
+                frontier.append(t)
+
     # --- hovers -----------------------------------------------------------------------------------
     # Every constant a statement in scope names, every declaration in scope, and every upstream
     # constant a graph draws: its kind, signature, docstring and package, sharded by name so that a
@@ -364,21 +407,17 @@ def build(opt: Options) -> dict:
         if st.get("conclusionHead"):
             named.add(st["conclusionHead"])
         named.update(by_id[t].name for t in meaning.get(d.id, ()) if not by_id[t].is_project)
+    named.update(by_id[t].name for t in up_nodes)
     tips: dict[str, list] = {}
     for n in named:
         node = ds.by_name.get(n)
         if node is None:
             continue
-        kind = kind_label(node, keyword.get(n)) if node.is_project else \
-            ("Theorem" if node.is_prop else {"definition": "Definition", "instance": "Instance",
-             "structure": "Structure", "class": "Class", "inductive": "Inductive", "axiom": "Axiom",
-             "opaque": "Opaque", "constructor": "Constructor", "recursor": "Recursor"}.get(node.kind, node.kind.title()))
+        kind = kind_label(node, keyword.get(n)) if node.is_project else upstream_kind(node)
         tips[n] = [kind, signature.get(n, ""), docs.get(n, ""), node.package, 1 if node.id in scope_set else 0]
     tip_shards = max(1, -(-len(tips) // 1500))
 
     # --- packages and trust -----------------------------------------------------------------------
-    packages = ds.packages
-    trusted = analysis.trusted_packages(packages, opt.trust)
     external_by_pkg: dict[str, set[str]] = defaultdict(set)
     for d in scope:
         for t in closure(d.id)[1]:
@@ -453,6 +492,10 @@ def build(opt: Options) -> dict:
                                       if by_id[t].is_project and t not in scope_set)}
                       if full_graph else None),
         "proofOnly": sorted(proof_only),
+        # The unaudited upstream declarations of data/upstream.json, how many, loaded with the first
+        # declaration graph that draws them; and the notion the dataset followed past the project
+        # (`upstreamClosure`), without which a band is what the project names from that package.
+        "upstreamGraph": {"nodes": len(up_nodes), "follow": ds.meta.get("upstreamClosure", {}).get("follow")},
         "chapters": chapter_list, "modules": modules_json,
         "packages": pkg_list, "trust": sorted(trusted - {"lean4"}), "trustGiven": sorted(opt.trust),
         "claims": {"claims": [c.as_json() for c in cl.claims], "scope": cl.scope, "sources": cl.sources,
@@ -511,6 +554,9 @@ def build(opt: Options) -> dict:
     if full_graph:
         full = {str(d.id): [t for t in term.get(d.id, ()) if t in scope_set and t != d.id] for d in scope}
         (out / "data" / "graph-full.json").write_text(json.dumps(full, **compact), encoding="utf-8")
+    upstream = {"nodes": {str(t): [by_id[t].name, by_id[t].package, upstream_kind(by_id[t])] for t in sorted(up_nodes)},
+                "edges": {str(s): ts for s, ts in sorted(up_edges.items())}}
+    (out / "data" / "upstream.json").write_text(json.dumps(upstream, **compact), encoding="utf-8")
     for i, entries in shards.items():
         (out / "data" / "m" / f"{i}.json").write_text(json.dumps(entries, **compact), encoding="utf-8")
     (out / "data" / "tips").mkdir()
