@@ -198,32 +198,52 @@ async function renderCheck() {
     Object.entries(c).map(([k, v]) => section(`${esc(k[0].toUpperCase() + k.slice(1))} <span class="lib-label">${num(v.length)}</span>`, v.length ? `<ul>${v.slice(0, 300).map(x => `<li><code>${esc(x)}</code></li>`).join('')}</ul>` : '<p class="muted">None.</p>')).join('');
 }
 
-/* ---------- a declaration's page ---------- */
+/* ---------- a declaration's page ----------
+   Drawn here around app.js's own (renderDecl): the banner across the top; on the left, the title and the
+   statement taken apart, then the reviews and what app.js shows under them (the graph, what it rests on);
+   on the right, the question, what the reader trusts, where it comes from, what could be better and
+   tests. The panel hook leaves a mark between the statement and the reviews, so that on a narrow screen
+   the right column comes between them. */
+const SPLIT = '<!--lib-split-->';
 function storeCtx(name, recs = new Map()) {
   const row = byName.get(name), lib = libOf(row ? pkgOfRow(row) : '') || LIB.libraries[0];
   return {repo: lib.store || S.issuesRepo, commit: lib.commit || S.commit, forms: S.forms, recs, nameLink: n => declLink(n),
     isProp: n => { const r = byName.get(n); return !!r && /Theorem|Lemma/.test(r[R.KIND]); }};
 }
-function declHead(e, name, row) {
-  const pkg = pkgOfRow(row), lib = libOf(pkg), d = LD[name] || {}, tid = d.topic || TOPIC_OF_MOD.get(row[R.MOD]);
-  let h = tid ? crumbs(tid) : '';
-  if (lib) h += `<div class="lib-banner ${esc(lib.kind)}"><b>${esc(lib.name)}</b> · ${esc(lib.process)}</div>`;
-  const title = d.t || '';
-  h += title ? `<h1 class="lib-decl">${md(title, true)}</h1><p class="lib-declname">${esc(name)}</p>` : `<h1 class="decl">${esc(name)}</h1>`;
+function declTop(name, row) {
+  const lib = libOf(pkgOfRow(row)), d = LD[name] || {}, tid = d.topic || TOPIC_OF_MOD.get(row[R.MOD]);
+  return (tid ? crumbs(tid) : '') + (lib ? `<div class="lib-banner ${esc(lib.kind)}"><b>${esc(lib.name)}</b> · ${esc(lib.process)}</div>` : '');
+}
+function declTitle(name, row) {
+  const d = LD[name] || {};
+  const h = d.t ? `<h1 class="lib-decl">${md(d.t, true)}</h1><p class="lib-declname">${esc(name)}</p>` : `<h1 class="decl">${esc(name)}</h1>`;
   const chips = [`<span class="lib-chip">${esc(row[R.KIND])}</span>`, ...(d.lit || []).map(([k, l]) => `<a class="lib-chip" href="${workHref(k)}">${workShort(k)}, ${esc(l)}</a>`),
     ...(d.items || []).slice(0, 4).map(i => `<span class="lib-chip">Roadmap: ${esc(i)}</span>`), ...(d.papers || []).map(p => `<a class="lib-chip" href="${paperHref(p)}">used by a paper</a>`)];
   return h + `<div class="lib-tries" style="margin:0 0 14px">${chips.join('')}</div>`;
 }
-function declContext(e, name, row) {
+function askBox(e, name, row) {
+  const ctx = storeCtx(name, new Map((e.records || []).map(r => [r.id, r])));
+  if (!ctx.forms) return '';
+  const kind = /Theorem|Lemma/.test(row[R.KIND]) ? 'theorem' : (row[R.KIND] || 'declaration').toLowerCase();
+  const lib = libOf(pkgOfRow(row)) || {};
+  return `<section class="lib-ask" id="ask"><h3>Is this ${esc(kind)} correctly stated?</h3>
+    <div class="btns"><a class="yes" target="_blank" rel="noopener" href="${RV.formUrl(ctx, 'review', name)}">Yes</a><a class="no" target="_blank" rel="noopener" href="${RV.formUrl(ctx, 'problem', name)}">No</a></div>
+    <p class="muted" style="font-size:13px;margin:0 0 10px">Each opens a short form on GitHub, filled in for this declaration; your answer is recorded under your account in the ${esc(lib.name || '')} store.</p>
+    <button type="button" class="lib-wide" id="copy-ai">Copy instructions for your AI</button></section>
+    <section class="lib-box"><h3>What could be better</h3><p>More general, a better name, a clearer statement.</p>
+      <a class="lib-wide" target="_blank" rel="noopener" href="${RV.formUrl(ctx, 'question', name)}">Suggest an improvement</a></section>
+    ${ctx.forms.challenge ? `<section class="lib-box"><h3>Tests</h3><p>A property it should have, which a declaration of the library would prove.</p>
+      <a class="lib-wide" target="_blank" rel="noopener" href="${RV.formUrl(ctx, 'challenge', name)}">Suggest a test</a></section>` : ''}`;
+}
+function contextBoxes(e, name, row) {
   const d = LD[name] || {}, boxes = [];
-  if ((d.lit || []).length) boxes.push(`<div class="box"><h3>The literature</h3>${d.lit.map(([k, l]) => { const w = LIB.works.find(x => x.key === k) || {};
-    return `<p><a href="${workHref(k)}">${esc(w.title || k)}</a>, ${esc(l)}<br><span class="muted">${esc((w.authors || []).join(', '))}${w.year ? `, ${w.year}` : ''}</span></p>`; }).join('')}<p class="lib-label">Linked from the citations in its docstring.</p></div>`);
-  if ((d.items || []).length) boxes.push(`<div class="box"><h3>The roadmaps, written by people</h3>${d.items.map(i => { const r = LIB.roadmaps.find(x => x.layers.some(l => l.items.some(it => it.id === i)));
+  if ((d.lit || []).length) boxes.push(`<section class="lib-box"><h3>The literature</h3>${d.lit.map(([k, l]) => { const w = LIB.works.find(x => x.key === k) || {};
+    return `<p><a href="${workHref(k)}">${esc(w.title || k)}</a>, ${esc(l)}<br><span class="muted">${esc((w.authors || []).join(', '))}${w.year ? `, ${w.year}` : ''}</span></p>`; }).join('')}<p class="lib-label">Linked from the citations in its docstring.</p></section>`);
+  if ((d.items || []).length) boxes.push(`<section class="lib-box"><h3>The roadmaps, written by people</h3>${d.items.map(i => { const r = LIB.roadmaps.find(x => x.layers.some(l => l.items.some(it => it.id === i)));
     const it = r && r.layers.flatMap(l => l.items).find(x => x.id === i);
-    return `<p>${r ? `<a href="${roadmapHref(r.id)}">${esc(i)}</a>` : esc(i)}${it ? `: ${md(it.title, true)}` : ''}</p>`; }).join('')}<p class="lib-label">Items asking for the results it cites.</p></div>`);
-  if ((d.papers || []).length) boxes.push(`<div class="box"><h3>Papers</h3>${d.papers.map(p => { const x = LIB.papers.find(q => q.id === p); return x ? `<p><a href="${paperHref(p)}">${esc(x.title)}</a></p>` : ''; }).join('')}</div>`);
-  boxes.push(trustBox(e, name, row));
-  return `<div class="lib-ctx">${boxes.join('')}</div>`;
+    return `<p>${r ? `<a href="${roadmapHref(r.id)}">${esc(i)}</a>` : esc(i)}${it ? `: ${md(it.title, true)}` : ''}</p>`; }).join('')}<p class="lib-label">Items asking for the results it cites.</p></section>`);
+  if ((d.papers || []).length) boxes.push(`<section class="lib-box"><h3>Papers</h3>${d.papers.map(p => { const x = LIB.papers.find(q => q.id === p); return x ? `<p><a href="${paperHref(p)}">${esc(x.title)}</a></p>` : ''; }).join('')}</section>`);
+  return boxes;
 }
 // What a reader trusts in a statement, Lean having checked the proof: what it rests on, by library,
 // and how much of it is reviewed under the reader's policy.
@@ -243,25 +263,30 @@ function trustBox(e, name, row) {
   // Named as the site trusts them (--trust), the packages under them included.
   const given = (S.trustGiven || []).map(p => esc(p[0].toUpperCase() + p.slice(1)));
   if (nTrusted) upItems.push(`<li class="up"><span>${given.length ? `${given.join(', ')} and what ${given.length === 1 ? 'it rests' : 'they rest'} on` : 'Lean'}, trusted</span><b>${num(nTrusted)}</b></li>`);
-  return `<div class="box"><h3>What you trust here</h3><p>Lean checks the proof. To trust the statement, you trust what it rests on:</p><ul class="lib-trust">${items.join('')}${upItems.join('')}</ul><p><a href="#dg">See the graph ↓</a></p></div>`;
+  return `<section class="lib-box"><h3>What you trust here</h3><p>Lean checks the proof. To trust the statement, you trust what it rests on:</p><ul class="lib-trust">${items.join('')}${upItems.join('')}</ul><button type="button" class="lib-link" data-scroll="dg">See the graph ↓</button></section>`;
 }
+// The reviews, after the mark where the page's two parts meet.
 function declPanel(e, name, row) {
   const recs = e.records || [], ctx = storeCtx(name, new Map(recs.map(r => [r.id, r])));
-  const kind = /Theorem|Lemma/.test(row[R.KIND]) ? 'theorem' : (row[R.KIND] || 'declaration').toLowerCase();
-  const lib = libOf(pkgOfRow(row)) || {};
   const reviews = recs.filter(r => r.kind === 'review').sort((a, b) => (b.inForce - a.inForce) || (a.at < b.at ? 1 : -1));
   const people = reviews.filter(r => r.by.kind !== 'agent'), agents = reviews.filter(r => r.by.kind === 'agent');
-  const ask = ctx.forms ? `<section class="lib-ask" id="ask"><h3>Is this ${esc(kind)} correctly stated?</h3>
-    <div class="btns"><a class="yes" target="_blank" rel="noopener" href="${RV.formUrl(ctx, 'review', name)}">Yes</a><a class="no" target="_blank" rel="noopener" href="${RV.formUrl(ctx, 'problem', name)}">No</a></div>
-    <p class="muted" style="font-size:13px;margin:0">Each opens a short form on GitHub, filled in for this declaration; your answer is recorded under your account in the ${esc(lib.name || '')} store.</p>
-    <div class="more"><a target="_blank" rel="noopener" href="${RV.formUrl(ctx, 'question', name)}">What could be better</a>${ctx.forms.challenge ? `<a target="_blank" rel="noopener" href="${RV.formUrl(ctx, 'challenge', name)}">Suggest a test</a>` : ''}<button type="button" id="copy-ai">Copy instructions for your AI</button></div></section>` : '';
   const thread = r => RV.thread(ctx, r);
-  const answers = `<section class="lib-answers" id="reviews"><h3>Reviews <span class="lib-label">${RV.tally(reviews)}</span> ${reviewChip(name)}</h3>
+  return SPLIT + `<section class="lib-answers" id="reviews"><h3>Reviews <span class="lib-label">${RV.tally(reviews)}</span> ${reviewChip(name)}</h3>
     <p class="muted" style="font-size:14px">Whose reviews count is your choice: <a href="#/community">your policy</a>.</p>
     <h4>People</h4>${people.map(thread).join('') || '<p class="muted">No answers from people yet.</p>'}
     <h4>AI agents</h4>${agents.map(thread).join('') || '<p class="muted">None.</p>'}
     ${recs.filter(r => r.kind !== 'review' && r.kind !== 'comment').map(thread).join('')}</section>`;
-  return ask + answers;
+}
+async function renderLibDecl(name) {
+  const e = await declData(name), row = byName.get(name);
+  if (!e || !row) return undefined;   // app.js's own page: not found
+  const r = await renderDecl(name);
+  const [h, after] = Array.isArray(r) ? r : [r, null];
+  const k = h.indexOf(SPLIT);
+  const first = k < 0 ? h : h.slice(0, k), rest = k < 0 ? '' : h.slice(k + SPLIT.length);
+  const aside = [askBox(e, name, row), trustBox(e, name, row), ...contextBoxes(e, name, row)].join('');
+  return [`${declTop(name, row)}<div class="lib-decl-grid"><div class="lib-a">${declTitle(name, row)}${first}</div><aside class="lib-aside" aria-label="Review and context">${aside}</aside><div class="lib-b">${rest}</div></div>`,
+    () => { if (after) after(); const c = $('#copy-ai'); if (c) c.onclick = () => { navigator.clipboard?.writeText(copyInstructions(name)); c.textContent = 'Copied'; }; }];
 }
 function copyInstructions(name) {
   const row = byName.get(name), ctx = storeCtx(name), lib = libOf(pkgOfRow(row)) || {};
@@ -315,12 +340,19 @@ async function libStart() {
   try { if (localStorage.getItem('referee-site:expanded') === null) expanded = true; } catch (err) { expanded = true; }
 }
 async function libRoute(a, b) {
+  // A declaration's page has two columns of its own: the topics go behind the menu button.
+  document.body.classList.toggle('lib-decl', a === 'd');
   const r = a === '' || a === undefined ? renderLibHome() : a === 't' ? renderTopic(b) : a === 'literature' ? renderWorks() : a === 'w' ? renderWork(b)
     : a === 'papers' ? renderPapers() : a === 'p' ? renderPaper(b) : a === 'roadmaps' ? renderRoadmaps() : a === 'r' ? renderRoadmap(b)
-    : a === 'contribute' ? renderContribute() : a === 'search' ? await renderSearch(b) : a === 'check' ? await renderCheck() : undefined;
+    : a === 'contribute' ? renderContribute() : a === 'search' ? await renderSearch(b) : a === 'check' ? await renderCheck()
+    : a === 'd' ? await renderLibDecl(b) : undefined;
   document.querySelectorAll('#toc a[data-t]').forEach(x => x.classList.toggle('here', a === 't' && x.dataset.t === b));
-  if (a === 'd') setTimeout(() => { const c = $('#copy-ai'); if (c) c.onclick = () => { navigator.clipboard?.writeText(copyInstructions(b)); c.textContent = 'Copied'; }; }, 0);
   return r;
 }
+// A link within a page (`data-scroll`): addresses are routes here, so it scrolls rather than navigates.
+document.addEventListener('click', ev => {
+  const s = ev.target.closest('[data-scroll]'); if (!s) return;
+  ev.preventDefault(); const t = document.getElementById(s.dataset.scroll); if (t) t.scrollIntoView({behavior: 'smooth', block: 'start'});
+});
 
-window.refereeHooks = {start: libStart, frame: libFrame, search: libSearch, route: libRoute, declHead, declContext, declPanel, band, nodeStyle};
+window.refereeHooks = {start: libStart, frame: libFrame, search: libSearch, route: libRoute, declHead: () => '', declPanel, band, nodeStyle};
