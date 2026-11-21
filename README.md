@@ -6,7 +6,7 @@ what the project claims, what changed, and who reviewed what. It is built from a
 evidence store (S3); it needs Python, not Lean.
 
 ```bash
-pip install git+https://github.com/LeanTrustBuilders/referee-site@v0.14.0
+pip install git+https://github.com/LeanTrustBuilders/referee-site@v0.14.1
 referee-site build --dataset DATASET --source CHECKOUT --out site/ --trust mathlib
 ```
 
