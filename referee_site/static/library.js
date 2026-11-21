@@ -340,7 +340,7 @@ async function libStart() {
   try { if (localStorage.getItem('referee-site:expanded') === null) expanded = true; } catch (err) { expanded = true; }
 }
 async function libRoute(a, b) {
-  // A declaration's page has two columns of its own: the topics go behind the menu button.
+  // A declaration's page is wider, for its two columns.
   document.body.classList.toggle('lib-decl', a === 'd');
   const r = a === '' || a === undefined ? renderLibHome() : a === 't' ? renderTopic(b) : a === 'literature' ? renderWorks() : a === 'w' ? renderWork(b)
     : a === 'papers' ? renderPapers() : a === 'p' ? renderPaper(b) : a === 'roadmaps' ? renderRoadmaps() : a === 'r' ? renderRoadmap(b)
