@@ -240,7 +240,9 @@ function trustBox(e, name, row) {
     return `<li class="${esc(l.kind)}"><span>${esc(l.name)}${l.kind === 'ai' ? ', written by AI' : l.kind === 'people' ? ', reviewed by people' : ''}</span><b>${num(x.n)}${l.kind === 'ai' ? ` · ${x.ok ? `${num(x.ok)} reviewed` : 'none reviewed'}` : ''}</b></li>`; });
   const upItems = [...ups].sort((a, b) => b[1] - a[1]).map(([p, n]) => { const u = UPSTREAM.get(p);
     return `<li class="up"><span>${esc(u ? u.name : p)}${u && u.note ? `, ${esc(u.note)}` : ''}</span><b>${num(n)}</b></li>`; });
-  if (nTrusted) upItems.push(`<li class="up"><span>${[...trusted].filter(p => p !== 'lean4').map(esc).join(', ')}${trusted.size > 1 ? ' and ' : ''}Lean, trusted</span><b>${num(nTrusted)}</b></li>`);
+  // Named as the site trusts them (--trust), the packages under them included.
+  const given = (S.trustGiven || []).map(p => esc(p[0].toUpperCase() + p.slice(1)));
+  if (nTrusted) upItems.push(`<li class="up"><span>${given.length ? `${given.join(', ')} and what ${given.length === 1 ? 'it rests' : 'they rest'} on` : 'Lean'}, trusted</span><b>${num(nTrusted)}</b></li>`);
   return `<div class="box"><h3>What you trust here</h3><p>Lean checks the proof. To trust the statement, you trust what it rests on:</p><ul class="lib-trust">${items.join('')}${upItems.join('')}</ul><p><a href="#dg">See the graph ↓</a></p></div>`;
 }
 function declPanel(e, name, row) {
