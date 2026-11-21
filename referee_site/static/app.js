@@ -3,6 +3,11 @@
            #/c/<chapter>  #/m/<module index>  #/d/<declaration name>                       */
 'use strict';
 
+// Hooks a page can set before the site starts (window.refereeHooks), as the library site does: start,
+// frame, search, route(a, b), declHead, declContext, declPanel (each (e, name, row) → html), band(key)
+// and nodeStyle(node) for the declaration graph.
+const hook = name => (window.refereeHooks || {})[name];
+
 const CHANGE_LABEL = {statement: 'statement changed', body: 'body changed', underneath: 'meaning changed underneath',
   proof: 'proof changed', renamed: 'renamed', added: 'new', removed: 'removed'};
 
@@ -451,7 +456,7 @@ async function renderDecl(name) {
   const entries = await shard(mi); const k = entries.findIndex(x => x.name === name);
   const prev = k > 0 ? [declHref(entries[k - 1].name), entries[k - 1].name] : [modHref(mi), `${moduleNumber.get(mi)}. ${S.modules[mi].short}`];
   const next = k < entries.length - 1 ? [declHref(entries[k + 1].name), entries[k + 1].name] : null;
-  let h = pager(prev, next) + `<h1 class="decl">${esc(name)}</h1>`;
+  let h = pager(prev, next) + (hook('declHead') ? hook('declHead')(e, name, row) : `<h1 class="decl">${esc(name)}</h1>`);
   if (e.change) h += `<div class="changebar"><span class="badge ${e.change.class}">${CHANGE_LABEL[e.change.class]}</span> since the previous build${e.change.was ? ` (was <code>${esc(e.change.was)}</code>)` : ''}${e.change.causes?.length ? `: rewritten beneath it: ${e.change.causes.map(c => declLink(c)).join(', ')}` : ''}</div>`;
   h += deprecationHtml(e) + cardHtml(e) + linksHtml(e);
   if (e.proofOnly) h += `<div class="notice">On this site only because a proof uses it${e.proofUsers.length ? `: the proof${e.proofUsers.length === 1 ? '' : 's'} of ${e.proofUsers.slice(0, 8).map(n => declLink(n)).join(', ')}${e.proofUsers.length > 8 ? ', …' : ''}` : ''}. Nothing the site's results state rests on it, so it is outside every count: it is here for the full dependency graph.</div>`;
@@ -461,13 +466,14 @@ async function renderDecl(name) {
   if (!e.isProp) h += domainHtml(e) + wellDefinedHtml(e) + pinsHtml(e);
   else h += wellDefinedHtml(e);
   h += '</div>';
+  if (hook('declContext')) h += hook('declContext')(e, name, row);
   if (e.provenance && S.ledger) {
     const b = S.ledger.builds[e.provenance.last], when = b.date ? ` (${esc(b.date)})` : '';
     let p = e.provenance.changes > 1 ? `Meaning last changed in <b>${esc(b.label)}</b>${when}, the ${ordinal(e.provenance.changes)} recorded change.` : `Meaning unchanged since <b>${esc(b.label)}</b>${when}, the first build recorded.`;
     if (e.edited && b.date && e.edited.date > b.date) p += ` File edited ${esc(e.edited.date)} without changing what it means.`;
     h += `<p class="muted" style="font-size:14px">${p}</p>`;
   } else if (e.edited) h += `<p class="muted" style="font-size:14px">File last edited ${esc(e.edited.date)}.</p>`;
-  h += community() ? communityPanel(e, name) : auditControl(name);
+  h += hook('declPanel') ? hook('declPanel')(e, name, row) : community() ? communityPanel(e, name) : auditControl(name);
   const b = beneath(row[R.ID]);
   // The characterized definitions of this graph: each can be taken from its characterization instead
   // of its construction, by the reader, one at a time (from the switches here or the node's card).
@@ -631,7 +637,9 @@ async function renderDecl(name) {
       const set = new Set(ids), es = [];
       for (const i of ids) for (const u of succ(i)) if (set.has(u)) es.push([i, u]);
       for (const i of [...ids, ...ups]) for (const u of upSucc(i)) es.push([i, u]);
-      const ns = ids.map(i => { const r = D[idIndex.get(i)]; return {id: i, label: r[R.NAME].split('.').pop(), title: r[R.NAME], kind: r[R.KIND], href: declHref(r[R.NAME]), summary: r[R.SUMMARY], root: i === rootId, sorry: r[R.SORRY] > 0, audit: r[R.NAME], faded: full && !construction.has(i), group: PROJECT}; });
+      // With a band hook, each project declaration is in its package's band (a dataset of several roots).
+      const ownBand = hook('band') ? r => S.modules[r[R.MOD]]?.package || PROJECT : () => PROJECT;
+      const ns = ids.map(i => { const r = D[idIndex.get(i)]; return {id: i, label: r[R.NAME].split('.').pop(), title: r[R.NAME], kind: r[R.KIND], href: declHref(r[R.NAME]), summary: r[R.SUMMARY], root: i === rootId, sorry: r[R.SORRY] > 0, audit: r[R.NAME], faded: full && !construction.has(i), group: ownBand(r)}; });
       const upPkgs = new Set();
       for (const u of ups) { const [n, p, k] = UP.nodes[u]; upPkgs.add(p); ns.push({id: u, label: n.split('.').pop(), title: n, constant: n, kind: k, package: p, group: p, untrusted: true}); }
       const top = showAudited && rootPlain ? audited.slice(0, 40) : [];
@@ -644,12 +652,21 @@ async function renderDecl(name) {
         for (const q of requires(p)) if (q !== p && upPkgs.has(q)) groupEdges.push([p, q]);
       }
       if (groups.length) groups.push({key: PROJECT, label: projectName, note: '· this project', kind: 'project'});
+      if (hook('band')) {
+        // One band per package, labelled by the hook, each above the packages that require it.
+        const keys = [...new Set(ns.map(n => n.group))].filter(k => k !== AUDITED);
+        const top = groups.filter(g => g.key === AUDITED);
+        groups.length = 0; groupEdges.length = 0; groups.push(...top);
+        for (const k of keys) groups.push({key: k, ...hook('band')(k)});
+        for (const k of keys) for (const q of requires(k)) if (q !== k && keys.includes(q)) groupEdges.push([k, q]);
+      }
       const keys = [];
       if (groups.length) keys.push(['Bands', `One per package: this project's at the bottom${ups.length ? `; above it, what the meaning rests on in the upstream packages nobody has vouched for, drawn as the project's own, each package above those that require it and beside those it is independent of` : ''}${top.length ? `; on top, what its statement names directly from audited packages` : ''}.${ups.length && follow !== 'meaning' && follow !== 'term' ? (follow === 'statement'
         ? ' The dataset follows only statements past the project (<code>--upstream-closure statement</code>): what an upstream definition\'s value rests on is not drawn.'
         : ' The dataset stops at the project (it was extracted without <code>--upstream-closure</code>): an unaudited band is what the project names from that package, not what that rests on in turn.') : ''}`]);
       if (ups.length) keys.push(['Grey dashed outline', 'From an upstream package nobody has vouched for: trusting this result means trusting it. Click one for its signature and docstring.']);
       graph(host, {nodes: ns, edges: es, groups, groupEdges, unit: 'declaration', ...AUDIT_GRAPH, marks: [...keys, ...AUDIT_GRAPH.marks],
+        style: hook('nodeStyle'),
         card: nodeCard, control: n => n.href ? cardControl(n.id) : '',
         extra: rootPlain && audited.length ? {label: showAudited ? 'Hide audited upstream' : `Show audited upstream (${audited.length})`, pressed: showAudited,
           onClick: () => { showAudited = !showAudited; try { localStorage.setItem('referee-site:graph-upstream', showAudited ? '1' : '0'); } catch (err) { } draw(); }} : null,
@@ -893,13 +910,15 @@ function frame() {
     box.innerHTML = `<span>Reviews</span><button data-mode="mine" title="My own review, private to this browser">mine</button><button data-mode="community" title="The community's reviews, from the evidence store">community</button>`;
     $('#theme').after(box); paintMode();
   }
+  if (hook('frame')) hook('frame')();
 }
 async function route() {
   const hash = decodeURIComponent(location.hash.slice(1) || '/'); const [, a, ...rest] = hash.split('/'); const b = rest.join('/');
   document.onkeydown = null;
   let r;
   try {
-    r = a === '' || a === undefined ? renderHome() : a === 'claims' ? renderClaims() : a === 'theorems' ? renderTheorems()
+    const own = hook('route') ? await hook('route')(a, b) : undefined;
+    r = own !== undefined ? own : a === '' || a === undefined ? renderHome() : a === 'claims' ? renderClaims() : a === 'theorems' ? renderTheorems()
       : a === 'specifications' ? await renderSpecifications() : a === 'browse' ? renderBrowse() : a === 'sorries' ? renderSorries()
       : a === 'changes' ? renderChanges() : a === 'community' ? await renderCommunity() : a === 'c' ? renderChapter(b) : a === 'm' ? await renderModule(+b) : a === 'd' ? await renderDecl(b) : notFound();
   } catch (e) { r = `<h1>Error</h1><pre>${esc(e.stack || e)}</pre>`; }
@@ -915,7 +934,8 @@ async function start() {
   D.forEach((r, i) => { byName.set(r[R.NAME], r); idIndex.set(r[R.ID], i); });
   PROOF_ONLY = new Set(S.proofOnly || []);
   S.hasSpecs = Object.values(S.pins || {}).some(p => p.pinned);
-  number(); loadAudit(); loadMode(); frame(); setupSearch(); setupTips();
+  if (hook('start')) await hook('start')();
+  number(); loadAudit(); loadMode(); frame(); if (hook('search')) hook('search')(); else setupSearch(); setupTips();
   document.addEventListener('click', ev => { const m = ev.target.closest('[data-mode]'); if (m) { ev.preventDefault(); setMode(m.dataset.mode); } });
   document.addEventListener('click', ev => { if (ev.target.closest('.expand-btn')) { expanded = !expanded; try { localStorage.setItem('referee-site:expanded', expanded ? '1' : '0'); } catch (e) { } applyExpanded(); } });
   window.addEventListener('hashchange', route); route();

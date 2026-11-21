@@ -31,6 +31,7 @@ from pathlib import Path
 from evidence_core import Dataset, Evidence
 from evidence_core import analysis
 from evidence_core import claims as claims_mod
+from evidence_core import context as context_mod
 from evidence_core import docs as docs_mod
 from evidence_core import ledger as ledger_mod
 from evidence_core import records as evrec
@@ -215,6 +216,23 @@ def build(opt: Options) -> dict:
     by_name_scope = {d.name: d for d in scope}
 
     # --- modules and chapters --------------------------------------------------------------------
+    # A dataset of several roots (several packages of the workspace extracted as one project): each
+    # module is short of its own root, and its sources are in its own repository.
+    roots_of = context_mod.package_roots(ds)
+    all_roots = sorted({r for rs in roots_of.values() for r in rs} | ({root} if root else set()), key=len, reverse=True)
+    origin = {root_pkg: (repo, commit) for root_pkg in [ds.meta.get("library", {}).get("package", "")] if root_pkg}
+    for p in ds.packages:
+        url = p.get("url", "")
+        if p.get("project") and url.startswith("https://github.com/") and p.get("rev") and p["name"] not in origin:
+            origin[p["name"]] = (url.removeprefix("https://github.com/").removesuffix(".git"), p["rev"])
+
+    def root_of(mod: str) -> str:
+        return next((r for r in all_roots if mod == r or mod.startswith(r + ".")), "")
+
+    def short_of(mod: str) -> str:
+        r = root_of(mod)
+        return mod[len(r) + 1:] if r and mod.startswith(r + ".") else mod
+
     mod_rows = {m["name"]: m for m in ds.modules}
     decls_by_module: dict[str, list] = defaultdict(list)
     for d in scope:
@@ -225,7 +243,7 @@ def build(opt: Options) -> dict:
     mod_index = {m: i for i, m in enumerate(module_names)}
 
     def chapter_of(mod: str) -> str:
-        rest = mod[len(root) + 1:] if root and mod.startswith(root + ".") else mod
+        rest = short_of(mod)
         return rest.split(".")[0] if "." in rest else "(root)"
 
     chapters: dict[str, list[int]] = defaultdict(list)
@@ -325,7 +343,7 @@ def build(opt: Options) -> dict:
             "subject": evrec.subject_from_decl(d, ds),
             "doc": doc, "statement": statements.get(d.name), "code": code, "proof": proof.strip(),
             "source": ({"path": srow["path"], "start": srow["start"][0], "end": srow["end"][0],
-                        "url": f"https://github.com/{repo}/blob/{commit}/{srow['path']}#L{srow['start'][0]}-L{srow['end'][0]}" if repo and commit else ""}
+                        "url": source_url(origin.get(d.package, (repo, commit)), srow)}
                        if srow else None),
             "deps": sorted(t for t in meaning.get(d.id, ()) if t in scope_set),
             "outside": sorted(by_id[t].name for t in meaning.get(d.id, ()) if by_id[t].is_project and t not in scope_set),
@@ -423,7 +441,7 @@ def build(opt: Options) -> dict:
         for t in closure(d.id)[1]:
             external_by_pkg[upstream_pkg.get(t, "")].add(by_id[t].name)
     pkg_list = [{"name": p["name"], "modules": p["modules"], "requires": p["requires"],
-                 "project": p["name"] == ds.meta.get("library", {}).get("package"),
+                 "project": bool(p.get("project")) or p["name"] == ds.meta.get("library", {}).get("package"),
                  "toolchain": p["name"] == "lean4", "trusted": p["name"] in trusted or p["name"] == "lean4",
                  "statementConstants": len(external_by_pkg.get(p["name"], ())),
                  "unaudited": sorted(external_by_pkg.get(p["name"], ()))[:500]
@@ -450,7 +468,8 @@ def build(opt: Options) -> dict:
         ds_ = decls_by_module.get(m, [])
         project_imports = [mod_index[i] for i in row.get("imports", []) if i in mod_index]
         modules_json.append({
-            "id": mod_index[m], "name": m, "short": m[len(root) + 1:] if root and m.startswith(root + ".") else m,
+            "id": mod_index[m], "name": m, "short": short_of(m),
+            "package": ds_[0].package if ds_ else "",
             "chapter": chapter_of(m).lower(), "title": module_title(row.get("doc", [])),
             "doc": row.get("doc", []), "path": row.get("path", ""), "imports": project_imports,
             "decls": len(ds_),
@@ -567,6 +586,15 @@ def build(opt: Options) -> dict:
         (out / "data" / "tips" / f"{k}.json").write_text(json.dumps(by_shard.get(k, {}), **compact), encoding="utf-8")
     return {"decls": len(scope), "modules": len(module_names), "claims": len(cl.claims),
             "proofOnly": len(proof_only), "fullGraph": full_graph, "warnings": cl.warnings}
+
+
+def source_url(origin: tuple[str, str], srow: dict) -> str:
+    """A declaration's lines in its repository, at the commit of the dataset (``origin``: owner/name and
+    commit), when both are known."""
+    repo, commit = origin
+    if not (repo and commit):
+        return ""
+    return f"https://github.com/{repo}/blob/{commit}/{srow['path']}#L{srow['start'][0]}-L{srow['end'][0]}"
 
 
 def characterizations_of(ds: Dataset, chars: dict, by_name: dict, scope: set, meaning: dict) -> dict:

@@ -1,6 +1,7 @@
 """referee-site build --dataset DIR --out DIR [--source DIR] [options]
 referee-site trust-index --dataset DIR --out DIR [options]
 referee-site claim --dataset DIR --store evidence/ --out DIR [options]
+referee-site library --config site.toml --dataset DIR --out DIR [options]
 
 Builds the site of a Lean library from its dataset (S2, written by trust-extract), published
 evidence (S3), and a checkout of its source (for code, proofs, README and claims files).
@@ -58,6 +59,17 @@ def main(argv: list[str] | None = None) -> int:
                     help="a dataset of an earlier commit, to say what changed under a stale review (repeatable)")
     cp.add_argument("--repo", help="owner/name where the issue forms are (default: the store's library)")
     cp.add_argument("--title", help="the page's title")
+    lb = sub.add_parser("library", help="the library site: a library, or several, to discover in words and review")
+    lb.add_argument("--config", type=Path, required=True, help="the site's configuration (site.toml)")
+    lb.add_argument("--dataset", type=Path, required=True, help="the dataset (S2), of one root or several")
+    lb.add_argument("--out", type=Path, required=True, help="where to write the site")
+    lb.add_argument("--evidence", type=Path, help="the evidence store of the first library (a directory with store.json)")
+    lb.add_argument("--imports", type=Path, help="where the stores it imports were fetched (evidence-store fetch-imports)")
+    lb.add_argument("--source", type=Path, help="a checkout of the first library at the dataset's commit, its dependencies under .lake/packages")
+    lb.add_argument("--literature", type=Path, help="Literature Links annotations (JSON lines)")
+    lb.add_argument("--papers", type=Path, help="the papers built on the libraries (JSON)")
+    lb.add_argument("--plans", type=Path, help="the roadmaps (JSON)")
+    lb.add_argument("--ledger", type=Path, help="the provenance ledger")
     ti = sub.add_parser("trust-index", help="write the index trust-web reads")
     ti.add_argument("--dataset", type=Path, required=True, help="the dataset (S2) of the library")
     ti.add_argument("--out", type=Path, required=True, help="the directory indexes are written under")
@@ -79,6 +91,17 @@ def main(argv: list[str] | None = None) -> int:
         r = build_claim(ClaimOptions(dataset=args.dataset, out=args.out, store=args.store, evidence=args.evidence,
                                      imports=args.imports, claim=args.claim, source=args.source, at=args.at, repo=args.repo, title=args.title))
         print(f"claim: {r['claim']}, {r['declarations']} declarations, {r['records']} records → {args.out}")
+        return 0
+    if args.cmd == "library":
+        from .library import LibraryOptions, build_library
+        r = build_library(LibraryOptions(config=args.config, dataset=args.dataset, out=args.out, evidence=args.evidence,
+                                         imports=args.imports, source=args.source, literature=args.literature,
+                                         papers=args.papers, plans=args.plans, ledger=args.ledger))
+        for w in r["warnings"]:
+            print(f"warning: {w}", file=sys.stderr)
+        problems = ", ".join(f"{n} {k}" for k, n in r["check"].items() if n)
+        print(f"library: {r['decls']} declarations in {r['modules']} modules, {r['topics']} topics, {r['works']} works, "
+              f"{r['papers']} papers, {r['roadmaps']} roadmaps{f'; {problems}' if problems else ''} → {args.out}")
         return 0
     if args.cmd == "trust-index":
         from .trust_index import IndexOptions, build_index

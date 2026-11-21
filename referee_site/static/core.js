@@ -410,8 +410,10 @@ function graph(host, spec) {
     svg += bands.labels;
     for (const n of nodes) {
       const c = coords.get(n.id); if (!c) continue;
-      const [fill, stroke, ink] = fillOf(n);
-      const dash = n.sorry ? ' stroke-dasharray="4 3" style="stroke:var(--warn)"' : (n.untrusted ? ' stroke-dasharray="4 3"' : '');
+      // A page's own style for a node: [fill, stroke, ink, dash] (the library site's, by library).
+      const own = spec.style ? spec.style(n) : null;
+      const [fill, stroke, ink] = own || fillOf(n);
+      const dash = n.sorry ? ' stroke-dasharray="4 3" style="stroke:var(--warn)"' : own ? (own[3] ? ` stroke-dasharray="${own[3]}"` : '') : (n.untrusted ? ' stroke-dasharray="4 3"' : '');
       svg += `<g class="node${n.faded ? ' faded' : ''}" data-id="${n.id}" transform="translate(${c.x},${c.y})"><rect width="${c.w}" height="${H}" rx="7" fill="${fill}" stroke="${stroke}"${dash}/><text x="${c.w / 2}" y="17" text-anchor="middle" fill="${ink}">${esc(trunc(n.label))}</text><g class="mark"></g><title>${esc((n.kind ? n.kind + ': ' : '') + (n.title || n.label))}</title></g>`;
     }
     svg += '</g></svg>';

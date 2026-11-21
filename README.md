@@ -6,7 +6,7 @@ what the project claims, what changed, and who reviewed what. It is built from a
 evidence store (S3); it needs Python, not Lean.
 
 ```bash
-pip install git+https://github.com/LeanTrustBuilders/referee-site@v0.13.0
+pip install git+https://github.com/LeanTrustBuilders/referee-site@v0.14.0
 referee-site build --dataset DATASET --source CHECKOUT --out site/ --trust mathlib
 ```
 
@@ -124,6 +124,34 @@ problem, question and reply about them, as threads. A review of an earlier versi
 with what is left to review, the axes of the rubric nobody checked and the disagreements. Every "Review",
 "Report a problem" and "Ask a question" opens the store's form, prefilled. The whole site, scoped to
 the claim, is kept beside it as `site.html`.
+
+## The library site
+
+```bash
+referee-site library --config site.toml --dataset DATASET --source CHECKOUT --out site/ \
+  [--evidence STORE --imports IMPORTS] [--literature annotations.jsonl] [--papers papers.json] [--plans plans.json]
+```
+
+A site for discovering a library in words, and reviewing it: one library, or several extracted as one
+project (the extractor's several roots), each a package of the dataset. It is the site `build` writes,
+declaration pages included, with a layer that `site.toml` describes:
+
+- **libraries**: each package's name, repository, the evidence store its declarations are reviewed
+  in, how it is written (`kind`: `people`, `ai`, `other`) and a sentence on its process. A
+  declaration's page shows its library, what it rests on by library and by review state, and asks
+  "Is this correctly stated?", with Yes and No opening the form of its library's store;
+- **topics**: a topics file (evidence-core's `context`) maps folders of each library to subjects,
+  listed by section on the home page, each page with its key notions and main results in words (the
+  docstrings' titles and first sentences, or what the modules' main sections say of them);
+- **context**: Literature Links annotations (a page per work, its results and what formalizes
+  them), the papers built on the libraries, and plans (roadmaps, each item with what cites the
+  results it asks for);
+- **look**: title, navigation, sections, upstream packages' names, and how to contribute.
+
+Search works in words, over topics, declarations, works, papers and plans. The statement of a
+declaration is taken apart as on every page here, with a sentence under each assumption by default;
+its graph has a band per library. `#/check` lists what the context says that the dataset does not
+bear out.
 
 ## The trust index
 
