@@ -205,6 +205,23 @@ def build_library(opt: LibraryOptions) -> dict:
             "files": dict(per_lib), "notions": notions[:40], "results": results[:60],
             "moreNotions": max(0, len(notions) - 40), "moreResults": max(0, len(results) - 60),
         })
+    # A topic's files, its subtopics' included (no module is in two topics), library by library in
+    # the site's order.
+    kids: dict[str, list[dict]] = defaultdict(list)
+    for t in topics_json:
+        if t["parent"]:
+            kids[t["parent"]].append(t)
+    order = [lib["name"] for lib in libraries]
+
+    def subtree(t: dict) -> dict[str, int]:
+        n = defaultdict(int, t["files"])
+        for k in kids[t["id"]]:
+            for lib, c in subtree(k).items():
+                n[lib] += c
+        return n
+    totals = {t["id"]: subtree(t) for t in topics_json}
+    for t in topics_json:
+        t["files"] = dict(sorted(totals[t["id"]].items(), key=lambda x: order.index(x[0]) if x[0] in order else len(order)))
 
     # --- works, papers, roadmaps -----------------------------------------------------------------
     works_json = []

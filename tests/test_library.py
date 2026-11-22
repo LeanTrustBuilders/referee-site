@@ -35,7 +35,12 @@ id = "all"
 title = "Everything"
 section = "main"
 roadmap = "Plan"
-folders = { Fix = ["Basic", "Uses", "Notation"] }
+folders = { Fix = ["Basic", "Notation"] }
+[[topic]]
+id = "uses"
+title = "Uses"
+parent = "all"
+folders = { Fix = ["Uses"] }
 """
 
 ANNOTATION = {"subject": [{"type": "html", "uri": "https://example.org/W", "location": {"label": "Theorem 2"},
@@ -57,13 +62,16 @@ class LibraryTests(unittest.TestCase):
         r = build_library(LibraryOptions(config=tmp / "site.toml", dataset=V / "fixture-b", out=tmp / "out",
                                          source=V / "source-b", literature=tmp / "lit.jsonl", papers=tmp / "papers.json",
                                          plans=tmp / "plans.json"))
-        self.assertEqual((r["topics"], r["works"], r["papers"], r["roadmaps"]), (1, 1, 1, 1))
+        self.assertEqual((r["topics"], r["works"], r["papers"], r["roadmaps"]), (2, 1, 1, 1))
         data = tmp / "out" / "data"
         lib = json.loads((data / "library.json").read_text())
         self.assertEqual(lib["libraries"][0]["kind"], "ai")
         self.assertEqual(lib["libraries"][0]["commit"], "B")
-        [t] = lib["topics"]
+        t, u = lib["topics"]
         self.assertTrue(t["modules"])
+        # A topic counts its subtopics' files too.
+        self.assertEqual(t["files"]["Fix"], len(t["modules"]) + len(u["modules"]))
+        self.assertEqual(u["files"]["Fix"], len(u["modules"]))
         self.assertEqual(lib["works"][0]["results"][0]["decls"], ["Fixture.double_zero"])
         self.assertEqual(lib["roadmaps"][0]["layers"][0]["items"][0]["decls"], ["Fixture.double_zero"])
         ld = json.loads((data / "library-decls.json").read_text())
