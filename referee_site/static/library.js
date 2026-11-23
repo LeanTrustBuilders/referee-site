@@ -155,10 +155,11 @@ function renderRoadmap(id) {
   let h = `<nav class="lib-crumbs"><a href="#/roadmaps">Roadmaps</a></nav><h1 class="lib-h1">${esc(r.title)}</h1>${r.url ? `<p><a href="${esc(r.url)}">The roadmap on GitHub</a></p>` : ''}`;
   if (r.scope) h += `<div class="lib-scope"><p class="lib-label">Written by people</p>${md(r.scope)}</div>`;
   for (const l of r.layers) {
+    // Each item: what it asks for, as the roadmap words it, then what in the libraries cites its results.
     h += `<div class="lib-layer"><h3>${l.n != null ? `Layer ${esc(String(l.n))}: ` : ''}${md(l.title, true)}</h3>${l.items.map(i => `<div class="lib-item"><span class="id">${esc(i.id)}</span><br><b>${md(i.title, true)}</b>
-      ${i.decls.length ? `<div>${i.decls.slice(0, 6).map(n => `<a href="${declHref(n)}">${words(n)}</a> ${libChip((LD[n] || {}).p)}`).join('<br>')}${i.decls.length > 6 ? `<br><span class="muted">and ${i.decls.length - 6} more</span>` : ''}</div>`
-        : i.results.length ? '<div class="muted">Nothing in the libraries cites the results it asks for yet.</div>' : ''}
-      ${i.text ? `<details><summary>What it asks for</summary>${md(i.text)}</details>` : ''}</div>`).join('')}</div>`;
+      ${i.text ? `<div class="lib-asks">${md(i.text)}</div>` : ''}
+      ${i.decls.length ? `<div class="lib-cites"><p class="lib-label">In the libraries</p>${i.decls.slice(0, 6).map(n => `<a href="${declHref(n)}">${words(n)}</a> ${libChip((LD[n] || {}).p)}`).join('<br>')}${i.decls.length > 6 ? `<br><span class="muted">and ${i.decls.length - 6} more</span>` : ''}</div>`
+        : i.results.length ? '<div class="lib-cites muted">Nothing in the libraries cites the results it asks for yet.</div>' : ''}</div>`).join('')}</div>`;
   }
   return h;
 }
